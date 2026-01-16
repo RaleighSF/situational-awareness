@@ -57,6 +57,8 @@ This application demonstrates how AI-powered vision analysis can automate securi
 - `DELETE /api/alerts` - Clear all alerts
 - `POST /api/analyze` - Analyze a video frame with a specific prompt
 - `GET /api/cosmos/health` - Check Cosmos endpoint health status
+- `GET /api/video/proxy` - Proxy video streams with CORS headers
+- `GET /api/test/frame` - Get a test frame for fallback testing
 
 ## Environment Variables
 
