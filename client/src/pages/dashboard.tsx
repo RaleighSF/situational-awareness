@@ -141,10 +141,10 @@ export default function Dashboard() {
     },
     onError: (error: Error) => {
       console.error("Analysis error:", error);
-      if (error.message.includes("unavailable") || error.message.includes("preview")) {
+      if (error.message.includes("unavailable") || error.message.includes("propagating") || error.message.includes("DNS")) {
         toast({
-          title: "AI Model Unavailable",
-          description: "The Cosmos Reason 2 model may still be in preview. Analysis will continue to retry.",
+          title: "Cosmos Endpoint Unavailable",
+          description: "The endpoint may still be initializing. Analysis will continue to retry.",
         });
       }
     },

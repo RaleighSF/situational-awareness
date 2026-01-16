@@ -56,11 +56,14 @@ This application demonstrates how AI-powered vision analysis can automate securi
 - `PATCH /api/alerts/:id` - Update an alert (mark as read)
 - `DELETE /api/alerts` - Clear all alerts
 - `POST /api/analyze` - Analyze a video frame with a specific prompt
+- `GET /api/cosmos/health` - Check Cosmos endpoint health status
 
 ## Environment Variables
 
 - `DATABASE_URL` - PostgreSQL connection string
-- `NVIDIA_API_KEY` - API key for NVIDIA Cosmos Reason 2
+- `COSMOS_ENDPOINT` - Custom Cosmos Reason 2 endpoint URL (default: https://cosmos.agentdemos.com)
+
+Note: The COSMOS_ENDPOINT points to a self-hosted Cosmos Reason 2 inference server. No API key is required as authentication is handled at the infrastructure level (Cloudflare/EC2).
 
 ## Usage
 

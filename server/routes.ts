@@ -2,22 +2,37 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertPromptSchema, insertAlertSchema } from "@shared/schema";
+import type { BoundingBox } from "@shared/schema";
 
-const NVIDIA_MODEL = process.env.NVIDIA_MODEL || "nvidia/cosmos-reason2-8b";
+const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT || "https://cosmos.agentdemos.com";
 
-async function analyzeWithCosmosReason2(
+interface CosmosROI {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function boundingBoxToROI(boundingBox: BoundingBox | null): CosmosROI | undefined {
+  if (!boundingBox) return undefined;
+  return {
+    x: boundingBox.x / 100,
+    y: boundingBox.y / 100,
+    w: boundingBox.width / 100,
+    h: boundingBox.height / 100,
+  };
+}
+
+async function analyzeWithCosmos(
   frameData: string,
-  prompt: string
+  prompt: string,
+  boundingBox: BoundingBox | null = null
 ): Promise<{ detected: boolean; analysis: string; confidence: string }> {
-  const apiKey = process.env.NVIDIA_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("NVIDIA_API_KEY not configured");
-  }
-
   const base64Data = frameData.replace(/^data:image\/[a-z]+;base64,/, "");
 
-  const systemPrompt = `You are a situational awareness AI analyzing security camera footage. Your task is to analyze the image and determine if the specified condition is detected.
+  const fullPrompt = `You are a situational awareness AI analyzing security camera footage. Analyze this image and determine if the following condition is present:
+
+"${prompt}"
 
 Answer in this exact format:
 DETECTED: [YES/NO]
@@ -26,50 +41,40 @@ ANALYSIS: [Your detailed analysis of what you observe]
 
 Be concise but thorough. If you detect the specified condition, explain exactly what you see that matches it. If not, explain what you see instead.`;
 
-  const userPrompt = `Analyze this image from a security camera feed and determine if the following condition is present:
+  const roi = boundingBoxToROI(boundingBox);
 
-"${prompt}"
+  const payload: {
+    image_b64: string;
+    prompt: string;
+    max_new_tokens: number;
+    roi?: CosmosROI;
+  } = {
+    image_b64: base64Data,
+    prompt: fullPrompt,
+    max_new_tokens: 256,
+  };
 
-Look carefully at the entire image and provide your assessment.`;
+  if (roi) {
+    payload.roi = roi;
+  }
 
   try {
-    const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+    const response = await fetch(`${COSMOS_ENDPOINT}/infer`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: NVIDIA_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: userPrompt },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Data}`,
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 1024,
-        temperature: 0.2,
-        stream: false,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("NVIDIA API error:", errorText);
-      throw new Error(`NVIDIA API error: ${response.status}`);
+      console.error("Cosmos API error:", errorText);
+      throw new Error(`Cosmos API error: ${response.status}`);
     }
 
     const result = await response.json();
-    const content = result.choices?.[0]?.message?.content || "";
+    const content = result.text || "";
 
     const detectedMatch = content.match(/DETECTED:\s*(YES|NO)/i);
     const confidenceMatch = content.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
@@ -81,7 +86,7 @@ Look carefully at the entire image and provide your assessment.`;
 
     return { detected, analysis, confidence };
   } catch (error) {
-    console.error("Error calling NVIDIA API:", error);
+    console.error("Error calling Cosmos API:", error);
     return {
       detected: false,
       analysis: `Analysis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -221,7 +226,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Prompt not found" });
       }
 
-      const result = await analyzeWithCosmosReason2(frameData, prompt.prompt);
+      const result = await analyzeWithCosmos(frameData, prompt.prompt, prompt.boundingBox);
 
       let alertCreated = false;
       if (result.detected) {
@@ -244,12 +249,32 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error analyzing frame:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to analyze frame";
-      const isModelUnavailable = errorMessage.includes("404") || errorMessage.includes("not found");
+      const isEndpointUnavailable = errorMessage.includes("ENOTFOUND") || 
+                                     errorMessage.includes("ETIMEDOUT") ||
+                                     errorMessage.includes("503") ||
+                                     errorMessage.includes("502");
       res.status(500).json({ 
-        error: isModelUnavailable 
-          ? "AI model temporarily unavailable. The Cosmos Reason 2 model may still be in preview." 
+        error: isEndpointUnavailable 
+          ? "Cosmos endpoint temporarily unavailable. DNS may still be propagating." 
           : errorMessage,
-        modelUnavailable: isModelUnavailable
+        endpointUnavailable: isEndpointUnavailable
+      });
+    }
+  });
+
+  app.get("/api/cosmos/health", async (_req, res) => {
+    try {
+      const response = await fetch(`${COSMOS_ENDPOINT}/health`);
+      if (response.ok) {
+        res.json({ status: "healthy", endpoint: COSMOS_ENDPOINT });
+      } else {
+        res.status(503).json({ status: "unhealthy", endpoint: COSMOS_ENDPOINT });
+      }
+    } catch (error) {
+      res.status(503).json({ 
+        status: "unavailable", 
+        endpoint: COSMOS_ENDPOINT,
+        error: error instanceof Error ? error.message : "Unknown error"
       });
     }
   });
