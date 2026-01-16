@@ -296,18 +296,10 @@ export async function registerRoutes(
   });
 
   app.get("/api/test/frame", async (_req, res) => {
-    const width = 640;
-    const height = 360;
-    const pngHeader = Buffer.from([
-      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
-    ]);
-    
-    const testImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+FABJADq/hUFBHAAAAAElFTkSuQmCC";
-    
-    res.setHeader("Content-Type", "application/json");
     res.json({
-      frame: `data:image/png;base64,${testImageBase64}`,
-      timestamp: Date.now()
+      frame: null,
+      timestamp: Date.now(),
+      error: "Video capture required - please wait for video to load"
     });
   });
 

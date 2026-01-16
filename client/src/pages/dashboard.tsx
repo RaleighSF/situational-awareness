@@ -13,6 +13,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
@@ -20,6 +26,9 @@ import {
   Shield,
   Crosshair,
   Eye,
+  CheckCircle2,
+  XCircle,
+  Loader2,
 } from "lucide-react";
 import type { Prompt, Alert, BoundingBox } from "@shared/schema";
 
@@ -48,6 +57,16 @@ export default function Dashboard() {
   const [lastAnalysisTime, setLastAnalysisTime] = useState<Date | null>(null);
   const [nextAnalysisIn, setNextAnalysisIn] = useState<number | null>(null);
   const promptSchedulesRef = useRef<Map<string, PromptSchedule>>(new Map());
+  
+  const [isTestResultOpen, setIsTestResultOpen] = useState(false);
+  const [testingPrompt, setTestingPrompt] = useState<Prompt | null>(null);
+  const [testResult, setTestResult] = useState<{
+    detected: boolean;
+    analysis: string;
+    confidence: string;
+    frameData: string;
+  } | null>(null);
+  const [isTestLoading, setIsTestLoading] = useState(false);
   const activePromptsRef = useRef<string>("");
 
   const { data: prompts = [], isLoading: promptsLoading } = useQuery<Prompt[]>({
@@ -345,7 +364,10 @@ export default function Dashboard() {
         ...data,
       });
     } else {
-      createPromptMutation.mutate(data);
+      createPromptMutation.mutate({
+        ...data,
+        videoSourceId: null,
+      });
     }
     setEditingPrompt(null);
     setCurrentBoundingBox(null);
@@ -378,6 +400,49 @@ export default function Dashboard() {
   const handleViewAlertDetails = (alert: Alert) => {
     setSelectedAlert(alert);
     setIsAlertDetailOpen(true);
+  };
+
+  const handleTestPrompt = async (prompt: Prompt) => {
+    setTestingPrompt(prompt);
+    setTestResult(null);
+    setIsTestResultOpen(true);
+    setIsTestLoading(true);
+    
+    try {
+      const frameData = await getFrameWithFallback(prompt.boundingBox);
+      if (!frameData) {
+        toast({
+          title: "Cannot capture frame",
+          description: "Video is not ready. Please wait for it to load.",
+          variant: "destructive",
+        });
+        setIsTestResultOpen(false);
+        setIsTestLoading(false);
+        return;
+      }
+      
+      const response = await apiRequest("POST", "/api/analyze", {
+        frameData,
+        promptId: prompt.id,
+      });
+      
+      const result = await response.json();
+      setTestResult({
+        detected: result.detected,
+        analysis: result.analysis,
+        confidence: result.confidence,
+        frameData,
+      });
+    } catch (error) {
+      toast({
+        title: "Test failed",
+        description: error instanceof Error ? error.message : "Failed to test rule",
+        variant: "destructive",
+      });
+      setIsTestResultOpen(false);
+    } finally {
+      setIsTestLoading(false);
+    }
   };
 
   const alertPrompt = selectedAlert
@@ -530,6 +595,7 @@ export default function Dashboard() {
                           onEdit={handleEditPrompt}
                           onDelete={handleDeletePrompt}
                           onSelect={handleSelectPrompt}
+                          onTest={handleTestPrompt}
                           isSelected={selectedPrompt?.id === prompt.id}
                           alertCount={alertCountByPrompt(prompt.id)}
                         />
@@ -567,6 +633,68 @@ export default function Dashboard() {
         open={isAlertDetailOpen}
         onOpenChange={setIsAlertDetailOpen}
       />
+
+      <Dialog open={isTestResultOpen} onOpenChange={setIsTestResultOpen}>
+        <DialogContent className="max-w-lg" data-testid="dialog-test-result">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Test Result: {testingPrompt?.name}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {isTestLoading ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Analyzing frame with Cosmos AI...</p>
+            </div>
+          ) : testResult ? (
+            <div className="space-y-4">
+              {testResult.frameData && (
+                <div className="rounded-md overflow-hidden border">
+                  <img 
+                    src={testResult.frameData} 
+                    alt="Analyzed frame" 
+                    className="w-full h-auto"
+                    data-testid="img-test-frame"
+                  />
+                </div>
+              )}
+              
+              <div className={`flex items-center gap-2 p-3 rounded-md ${
+                testResult.detected 
+                  ? "bg-destructive/10 text-destructive" 
+                  : "bg-green-500/10 text-green-600 dark:text-green-400"
+              }`}>
+                {testResult.detected ? (
+                  <CheckCircle2 className="h-5 w-5" />
+                ) : (
+                  <XCircle className="h-5 w-5" />
+                )}
+                <span className="font-medium">
+                  {testResult.detected ? "Condition Detected" : "No Detection"}
+                </span>
+                <Badge variant="outline" className="ml-auto">
+                  {testResult.confidence} confidence
+                </Badge>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">AI Analysis</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {testResult.analysis}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Detection Rule</h4>
+                <p className="text-sm text-muted-foreground">
+                  {testingPrompt?.prompt}
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
