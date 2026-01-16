@@ -1,18 +1,75 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { sql, relations } from "drizzle-orm";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
+export const videoSources = pgTable("video_sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  isActive: boolean("is_active").default(true),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const videoSourcesRelations = relations(videoSources, ({ many }) => ({
+  prompts: many(prompts),
+}));
+
+export const boundingBoxSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type BoundingBox = z.infer<typeof boundingBoxSchema>;
+
+export const prompts = pgTable("prompts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  videoSourceId: varchar("video_source_id"),
+  name: text("name").notNull(),
+  prompt: text("prompt").notNull(),
+  boundingBox: jsonb("bounding_box").$type<BoundingBox | null>(),
+  frequencySeconds: integer("frequency_seconds").notNull().default(60),
+  isActive: boolean("is_active").default(true),
+});
+
+export const promptsRelations = relations(prompts, ({ one, many }) => ({
+  videoSource: one(videoSources, {
+    fields: [prompts.videoSourceId],
+    references: [videoSources.id],
+  }),
+  alerts: many(alerts),
+}));
+
+export const alerts = pgTable("alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  promptId: varchar("prompt_id").references(() => prompts.id),
+  timestamp: timestamp("timestamp").defaultNow(),
+  frameData: text("frame_data"),
+  analysisResult: text("analysis_result").notNull(),
+  confidence: text("confidence"),
+  isRead: boolean("is_read").default(false),
+});
+
+export const alertsRelations = relations(alerts, ({ one }) => ({
+  prompt: one(prompts, {
+    fields: [alerts.promptId],
+    references: [prompts.id],
+  }),
+}));
+
+export const insertVideoSourceSchema = createInsertSchema(videoSources).omit({ id: true });
+
+export const insertPromptSchema = createInsertSchema(prompts, {
+  boundingBox: z.union([boundingBoxSchema, z.null()]).optional(),
+}).omit({ id: true });
+
+export const insertAlertSchema = createInsertSchema(alerts).omit({ id: true, timestamp: true });
+
+export type InsertVideoSource = z.infer<typeof insertVideoSourceSchema>;
+export type InsertPrompt = z.infer<typeof insertPromptSchema>;
+export type InsertAlert = z.infer<typeof insertAlertSchema>;
+
+export type VideoSource = typeof videoSources.$inferSelect;
+export type Prompt = typeof prompts.$inferSelect;
+export type Alert = typeof alerts.$inferSelect;
