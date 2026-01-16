@@ -1,4 +1,5 @@
 import { useForm } from "react-hook-form";
+import { useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -60,13 +61,25 @@ export function PromptForm({
   const form = useForm<PromptFormData>({
     resolver: zodResolver(promptFormSchema),
     defaultValues: {
-      name: editPrompt?.name ?? "",
-      prompt: editPrompt?.prompt ?? "",
-      frequencySeconds: editPrompt?.frequencySeconds ?? 60,
-      isActive: editPrompt?.isActive ?? true,
-      useBoundingBox: editPrompt?.boundingBox != null || boundingBox != null,
+      name: "",
+      prompt: "",
+      frequencySeconds: 60,
+      isActive: true,
+      useBoundingBox: false,
     },
   });
+
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        name: editPrompt?.name ?? "",
+        prompt: editPrompt?.prompt ?? "",
+        frequencySeconds: editPrompt?.frequencySeconds ?? 60,
+        isActive: editPrompt?.isActive ?? true,
+        useBoundingBox: editPrompt?.boundingBox != null || boundingBox != null,
+      });
+    }
+  }, [open, editPrompt, boundingBox, form]);
 
   const handleSubmit = (data: PromptFormData) => {
     onSubmit({
