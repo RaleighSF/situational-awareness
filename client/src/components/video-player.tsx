@@ -106,32 +106,53 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
     };
 
     const captureFrameWithBox = useCallback((box?: BoundingBox | null): string | null => {
-      if (!videoRef.current || !canvasRef.current) return null;
+      if (!videoRef.current || !canvasRef.current) {
+        console.log("[VideoPlayer] No video or canvas ref");
+        return null;
+      }
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
+      if (!ctx) {
+        console.log("[VideoPlayer] No canvas context");
+        return null;
+      }
+
+      if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+        console.log(`[VideoPlayer] Video not ready: readyState=${video.readyState}, dimensions=${video.videoWidth}x${video.videoHeight}`);
+        return null;
+      }
 
       const targetBox = box ?? currentBox;
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      try {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
 
-      if (targetBox) {
-        const sx = (targetBox.x / 100) * video.videoWidth;
-        const sy = (targetBox.y / 100) * video.videoHeight;
-        const sw = (targetBox.width / 100) * video.videoWidth;
-        const sh = (targetBox.height / 100) * video.videoHeight;
+        if (targetBox) {
+          const sx = (targetBox.x / 100) * video.videoWidth;
+          const sy = (targetBox.y / 100) * video.videoHeight;
+          const sw = (targetBox.width / 100) * video.videoWidth;
+          const sh = (targetBox.height / 100) * video.videoHeight;
 
-        canvas.width = Math.max(1, sw);
-        canvas.height = Math.max(1, sh);
-        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
-      } else {
-        ctx.drawImage(video, 0, 0);
+          canvas.width = Math.max(1, sw);
+          canvas.height = Math.max(1, sh);
+          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+        } else {
+          ctx.drawImage(video, 0, 0);
+        }
+
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        if (dataUrl.length < 100) {
+          console.log("[VideoPlayer] Frame capture produced empty data");
+          return null;
+        }
+        return dataUrl;
+      } catch (error) {
+        console.error("[VideoPlayer] Error capturing frame:", error);
+        return null;
       }
-
-      return canvas.toDataURL("image/jpeg", 0.8);
     }, [currentBox]);
 
     useImperativeHandle(ref, () => ({
@@ -167,12 +188,21 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
               ref={videoRef}
               src={videoUrl}
               className="w-full h-full object-contain"
+              autoPlay
               loop
               muted
               playsInline
+              preload="auto"
               onLoadedMetadata={handleVideoLoad}
+              onCanPlay={() => {
+                if (videoRef.current && isPlaying) {
+                  videoRef.current.play().catch(() => {});
+                }
+              }}
+              onError={(e) => {
+                console.error("[VideoPlayer] Video error:", e);
+              }}
               data-testid="video-element"
-              crossOrigin="anonymous"
             />
 
             {currentBox && (

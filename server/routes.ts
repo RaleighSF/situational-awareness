@@ -28,7 +28,23 @@ async function analyzeWithCosmos(
   prompt: string,
   boundingBox: BoundingBox | null = null
 ): Promise<{ detected: boolean; analysis: string; confidence: string }> {
-  const base64Data = frameData.replace(/^data:image\/[a-z]+;base64,/, "");
+  if (!frameData || frameData.length < 100) {
+    console.log("[Cosmos] Invalid frame data - too short or empty");
+    return {
+      detected: false,
+      analysis: "Invalid frame captured - video may not be loaded",
+      confidence: "LOW",
+    };
+  }
+
+  const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
+  const base64Data = dataUrlMatch 
+    ? frameData.slice(dataUrlMatch[0].length)
+    : frameData;
+  
+  if (!dataUrlMatch) {
+    console.log(`[Cosmos] Frame data doesn't have expected prefix. First 100 chars: ${frameData.substring(0, 100)}`);
+  }
 
   const fullPrompt = `You are a situational awareness AI analyzing security camera footage. Analyze this image and determine if the following condition is present:
 
@@ -276,6 +292,60 @@ export async function registerRoutes(
         endpoint: COSMOS_ENDPOINT,
         error: error instanceof Error ? error.message : "Unknown error"
       });
+    }
+  });
+
+  app.get("/api/test/frame", async (_req, res) => {
+    const width = 640;
+    const height = 360;
+    const pngHeader = Buffer.from([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+    ]);
+    
+    const testImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+FABJADq/hUFBHAAAAAElFTkSuQmCC";
+    
+    res.setHeader("Content-Type", "application/json");
+    res.json({
+      frame: `data:image/png;base64,${testImageBase64}`,
+      timestamp: Date.now()
+    });
+  });
+
+  app.get("/api/video/proxy", async (req, res) => {
+    const videoUrl = req.query.url as string;
+    if (!videoUrl) {
+      return res.status(400).json({ error: "Missing url parameter" });
+    }
+    
+    try {
+      const headers: Record<string, string> = {};
+      const range = req.headers.range;
+      if (range) {
+        headers["Range"] = range;
+      }
+      
+      const response = await fetch(videoUrl, { headers });
+      
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Accept-Ranges", "bytes");
+      
+      const contentType = response.headers.get("content-type");
+      if (contentType) res.setHeader("Content-Type", contentType);
+      
+      const contentLength = response.headers.get("content-length");
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+      
+      const contentRange = response.headers.get("content-range");
+      if (contentRange) {
+        res.setHeader("Content-Range", contentRange);
+        res.status(206);
+      }
+      
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (error) {
+      console.error("[Video Proxy] Error:", error);
+      res.status(500).json({ error: "Failed to proxy video" });
     }
   });
 

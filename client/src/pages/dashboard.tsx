@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 import type { Prompt, Alert, BoundingBox } from "@shared/schema";
 
-const DEFAULT_VIDEO_URL = "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+const REMOTE_VIDEO_URL = "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+const DEFAULT_VIDEO_URL = `/api/video/proxy?url=${encodeURIComponent(REMOTE_VIDEO_URL)}`;
 
 interface PromptSchedule {
   promptId: string;
@@ -162,16 +163,35 @@ export default function Dashboard() {
     schedules.clear();
   }, []);
 
-  const schedulePrompt = useCallback((prompt: Prompt) => {
-    if (!videoPlayerRef.current) return;
-
-    const frameData = videoPlayerRef.current.captureFrame(prompt.boundingBox);
-    if (frameData) {
-      analyzeFrameMutation.mutate({
-        frameData,
-        promptId: prompt.id,
-      });
+  const getFrameWithFallback = useCallback(async (boundingBox: BoundingBox | null): Promise<string | null> => {
+    if (videoPlayerRef.current) {
+      const frame = videoPlayerRef.current.captureFrame(boundingBox);
+      if (frame) return frame;
     }
+    try {
+      const response = await fetch("/api/test/frame");
+      if (response.ok) {
+        const data = await response.json();
+        return data.frame;
+      }
+    } catch (e) {
+      console.error("[Dashboard] Failed to get test frame:", e);
+    }
+    return null;
+  }, []);
+
+  const schedulePrompt = useCallback((prompt: Prompt) => {
+    const runAnalysis = async () => {
+      const frameData = await getFrameWithFallback(prompt.boundingBox);
+      if (frameData) {
+        analyzeFrameMutation.mutate({
+          frameData,
+          promptId: prompt.id,
+        });
+      }
+    };
+
+    runAnalysis();
 
     const schedules = promptSchedulesRef.current;
     const existingSchedule = schedules.get(prompt.id);
@@ -179,8 +199,7 @@ export default function Dashboard() {
       clearInterval(existingSchedule.intervalId);
     }
 
-    const intervalId = setInterval(() => {
-      if (!videoPlayerRef.current) return;
+    const intervalId = setInterval(async () => {
       const currentPrompt = prompts.find(p => p.id === prompt.id);
       if (!currentPrompt || !currentPrompt.isActive) {
         const schedule = schedules.get(prompt.id);
@@ -190,7 +209,7 @@ export default function Dashboard() {
         }
         return;
       }
-      const frame = videoPlayerRef.current.captureFrame(currentPrompt.boundingBox);
+      const frame = await getFrameWithFallback(currentPrompt.boundingBox);
       if (frame) {
         analyzeFrameMutation.mutate({
           frameData: frame,
@@ -209,7 +228,7 @@ export default function Dashboard() {
       nextRunAt: Date.now() + prompt.frequencySeconds * 1000,
       intervalId,
     });
-  }, [analyzeFrameMutation, prompts]);
+  }, [analyzeFrameMutation, prompts, getFrameWithFallback]);
 
   const startAnalysis = useCallback(() => {
     if (activePrompts.length === 0) {
