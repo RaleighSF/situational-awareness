@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema, sceneAgentSynthesisSchema } from "@shared/schema";
+import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema, sceneAgentSynthesisSchema, sourceSettingsSchema } from "@shared/schema";
 import type { BoundingBox, FrameObservation, SceneAgentSynthesis, SceneAgentResult } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
@@ -322,14 +322,87 @@ Hard limits (must follow):
   }
 }
 
+const DEFAULT_VIDEO_SOURCES = [
+  {
+    id: "got-commercial",
+    name: "GoT Commercial",
+    url: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+  },
+  {
+    id: "loading-dock",
+    name: "Loading Dock",
+    url: "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4",
+  },
+];
+
+async function seedVideoSources() {
+  const existing = await storage.getVideoSources();
+  if (existing.length === 0) {
+    console.log("[Seed] Creating default video sources...");
+    for (const source of DEFAULT_VIDEO_SOURCES) {
+      await storage.createVideoSource({
+        name: source.name,
+        url: source.url,
+        isActive: true,
+      });
+    }
+    console.log("[Seed] Default video sources created");
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  app.get("/api/prompts", async (_req, res) => {
+  await seedVideoSources();
+
+  app.get("/api/video-sources", async (_req, res) => {
     try {
-      const prompts = await storage.getPrompts();
+      const sources = await storage.getVideoSources();
+      res.json(sources);
+    } catch (error) {
+      console.error("Error fetching video sources:", error);
+      res.status(500).json({ error: "Failed to fetch video sources" });
+    }
+  });
+
+  app.get("/api/video-sources/:id", async (req, res) => {
+    try {
+      const source = await storage.getVideoSource(req.params.id);
+      if (!source) {
+        return res.status(404).json({ error: "Video source not found" });
+      }
+      res.json(source);
+    } catch (error) {
+      console.error("Error fetching video source:", error);
+      res.status(500).json({ error: "Failed to fetch video source" });
+    }
+  });
+
+  app.patch("/api/video-sources/:id/settings", async (req, res) => {
+    try {
+      const parseResult = sourceSettingsSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: fromZodError(parseResult.error).message });
+      }
+      const source = await storage.updateVideoSourceSettings(req.params.id, parseResult.data);
+      if (!source) {
+        return res.status(404).json({ error: "Video source not found" });
+      }
+      res.json(source);
+    } catch (error) {
+      console.error("Error updating video source settings:", error);
+      res.status(500).json({ error: "Failed to update settings" });
+    }
+  });
+
+  app.get("/api/prompts", async (req, res) => {
+    try {
+      const videoSourceId = req.query.videoSourceId as string | undefined;
+      const prompts = videoSourceId 
+        ? await storage.getPromptsByVideoSource(videoSourceId)
+        : await storage.getPrompts();
       res.json(prompts);
     } catch (error) {
       console.error("Error fetching prompts:", error);

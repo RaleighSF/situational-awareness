@@ -48,29 +48,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import type { Prompt, Alert, BoundingBox, SceneAgentResult } from "@shared/schema";
-
-const VIDEO_SOURCES = [
-  {
-    id: "got-commercial",
-    name: "GoT Commercial",
-    url: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-  },
-  {
-    id: "loading-dock",
-    name: "Loading Dock",
-    url: "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4",
-  },
-];
-
-const getVideoUrl = (sourceId: string) => {
-  const source = VIDEO_SOURCES.find(s => s.id === sourceId);
-  if (!source) return "";
-  if (source.url.startsWith("/")) {
-    return source.url;
-  }
-  return `/api/video/proxy?url=${encodeURIComponent(source.url)}`;
-};
+import type { Prompt, Alert, BoundingBox, SceneAgentResult, VideoSource, SourceSettings } from "@shared/schema";
 
 interface PromptSchedule {
   promptId: string;
@@ -79,10 +57,18 @@ interface PromptSchedule {
   intervalId: NodeJS.Timeout | null;
 }
 
+const getVideoUrl = (source: VideoSource | undefined) => {
+  if (!source) return "";
+  if (source.url.startsWith("/")) {
+    return source.url;
+  }
+  return `/api/video/proxy?url=${encodeURIComponent(source.url)}`;
+};
+
 export default function Dashboard() {
   const { toast } = useToast();
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
-  const [currentVideoSource, setCurrentVideoSource] = useState("loading-dock");
+  const [currentVideoSourceId, setCurrentVideoSourceId] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(true);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [currentBoundingBox, setCurrentBoundingBox] = useState<BoundingBox | null>(null);
@@ -114,14 +100,41 @@ export default function Dashboard() {
   const [sceneAgentElapsed, setSceneAgentElapsed] = useState(0);
   const [sceneAgentResult, setSceneAgentResult] = useState<SceneAgentResult | null>(null);
   const [isSceneAgentModalOpen, setIsSceneAgentModalOpen] = useState(false);
-  const [sceneAgentContext, setSceneAgentContext] = useState(() => {
-    return localStorage.getItem("sceneAgentContext") || "";
-  });
+  const [sceneAgentContext, setSceneAgentContext] = useState("");
   const [isSceneAgentSettingsOpen, setIsSceneAgentSettingsOpen] = useState(false);
   const sceneAgentFramesRef = useRef<string[]>([]);
 
+  const { data: videoSources = [], isLoading: sourcesLoading } = useQuery<VideoSource[]>({
+    queryKey: ["/api/video-sources"],
+  });
+
+  const currentSource = videoSources.find(s => s.id === currentVideoSourceId);
+
+  useEffect(() => {
+    if (videoSources.length > 0 && !currentVideoSourceId) {
+      setCurrentVideoSourceId(videoSources[0].id);
+    }
+  }, [videoSources, currentVideoSourceId]);
+
+  useEffect(() => {
+    if (currentSource?.settings) {
+      setCurrentBoundingBox(currentSource.settings.boundingBox || null);
+      setSceneAgentContext(currentSource.settings.sceneContext || "");
+    } else {
+      setCurrentBoundingBox(null);
+      setSceneAgentContext("");
+    }
+  }, [currentSource]);
+
   const { data: prompts = [], isLoading: promptsLoading } = useQuery<Prompt[]>({
-    queryKey: ["/api/prompts"],
+    queryKey: ["/api/prompts", currentVideoSourceId],
+    queryFn: async () => {
+      if (!currentVideoSourceId) return [];
+      const res = await fetch(`/api/prompts?videoSourceId=${currentVideoSourceId}`);
+      if (!res.ok) throw new Error("Failed to fetch prompts");
+      return res.json();
+    },
+    enabled: !!currentVideoSourceId,
   });
 
   const { data: alerts = [] } = useQuery<Alert[]>({
@@ -129,13 +142,32 @@ export default function Dashboard() {
     refetchInterval: isAnalyzing ? 5000 : false,
   });
 
+  const updateSourceSettingsMutation = useMutation({
+    mutationFn: async ({ sourceId, settings }: { sourceId: string; settings: SourceSettings }) => {
+      const res = await apiRequest("PATCH", `/api/video-sources/${sourceId}/settings`, settings);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/video-sources"] });
+    },
+  });
+
+  const saveSourceSettings = useCallback((settings: Partial<SourceSettings>) => {
+    if (!currentVideoSourceId) return;
+    const currentSettings = currentSource?.settings || {};
+    updateSourceSettingsMutation.mutate({
+      sourceId: currentVideoSourceId,
+      settings: { ...currentSettings, ...settings },
+    });
+  }, [currentVideoSourceId, currentSource, updateSourceSettingsMutation]);
+
   const createPromptMutation = useMutation({
     mutationFn: async (data: Omit<Prompt, "id">) => {
       const res = await apiRequest("POST", "/api/prompts", data);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/prompts", currentVideoSourceId] });
       toast({ title: "Detection rule created", description: "The rule is now active and monitoring." });
     },
     onError: (error) => {
@@ -149,7 +181,7 @@ export default function Dashboard() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/prompts", currentVideoSourceId] });
       toast({ title: "Rule updated" });
     },
     onError: (error) => {
@@ -162,7 +194,7 @@ export default function Dashboard() {
       await apiRequest("DELETE", `/api/prompts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/prompts", currentVideoSourceId] });
       toast({ title: "Rule deleted" });
     },
     onError: (error) => {
@@ -400,7 +432,7 @@ export default function Dashboard() {
     } else {
       createPromptMutation.mutate({
         ...data,
-        videoSourceId: null,
+        videoSourceId: currentVideoSourceId,
       });
     }
     setEditingPrompt(null);
@@ -708,7 +740,6 @@ export default function Dashboard() {
                             onChange={(e) => {
                               const value = e.target.value;
                               setSceneAgentContext(value);
-                              localStorage.setItem("sceneAgentContext", value);
                             }}
                             rows={4}
                             className="resize-none"
@@ -722,9 +753,12 @@ export default function Dashboard() {
                           size="sm"
                           variant="secondary"
                           className="w-full"
-                          onClick={() => setIsSceneAgentSettingsOpen(false)}
+                          onClick={() => {
+                            saveSourceSettings({ sceneContext: sceneAgentContext });
+                            setIsSceneAgentSettingsOpen(false);
+                          }}
                         >
-                          Done
+                          Save
                         </Button>
                       </div>
                     </PopoverContent>
@@ -735,12 +769,12 @@ export default function Dashboard() {
 
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm text-muted-foreground">Source:</span>
-              <Select value={currentVideoSource} onValueChange={setCurrentVideoSource}>
+              <Select value={currentVideoSourceId} onValueChange={setCurrentVideoSourceId}>
                 <SelectTrigger className="w-48" data-testid="select-video-source">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {VIDEO_SOURCES.map((source) => (
+                  {videoSources.map((source) => (
                     <SelectItem key={source.id} value={source.id} data-testid={`video-source-${source.id}`}>
                       {source.name}
                     </SelectItem>
@@ -752,7 +786,7 @@ export default function Dashboard() {
             <div className="relative">
               <VideoPlayer
                 ref={videoPlayerRef}
-                videoUrl={getVideoUrl(currentVideoSource)}
+                videoUrl={getVideoUrl(currentSource)}
                 isPlaying={isPlaying}
                 onPlayPause={() => setIsPlaying(!isPlaying)}
                 onBoundingBoxChange={setCurrentBoundingBox}

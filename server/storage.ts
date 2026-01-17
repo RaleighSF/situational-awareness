@@ -5,6 +5,7 @@ import {
   type InsertPrompt,
   type Alert,
   type InsertAlert,
+  type SourceSettings,
   videoSources,
   prompts,
   alerts,
@@ -17,10 +18,12 @@ export interface IStorage {
   getVideoSource(id: string): Promise<VideoSource | undefined>;
   createVideoSource(source: InsertVideoSource): Promise<VideoSource>;
   updateVideoSource(id: string, data: Partial<InsertVideoSource>): Promise<VideoSource | undefined>;
+  updateVideoSourceSettings(id: string, settings: SourceSettings): Promise<VideoSource | undefined>;
   deleteVideoSource(id: string): Promise<void>;
 
   getPrompts(): Promise<Prompt[]>;
   getPromptsByVideoSource(videoSourceId: string): Promise<Prompt[]>;
+  deletePromptsByVideoSource(videoSourceId: string): Promise<void>;
   getPrompt(id: string): Promise<Prompt | undefined>;
   createPrompt(prompt: InsertPrompt): Promise<Prompt>;
   updatePrompt(id: string, data: Partial<InsertPrompt>): Promise<Prompt | undefined>;
@@ -55,6 +58,11 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
+  async updateVideoSourceSettings(id: string, settings: SourceSettings): Promise<VideoSource | undefined> {
+    const [updated] = await db.update(videoSources).set({ settings }).where(eq(videoSources.id, id)).returning();
+    return updated || undefined;
+  }
+
   async deleteVideoSource(id: string): Promise<void> {
     await db.delete(videoSources).where(eq(videoSources.id, id));
   }
@@ -65,6 +73,14 @@ export class DatabaseStorage implements IStorage {
 
   async getPromptsByVideoSource(videoSourceId: string): Promise<Prompt[]> {
     return db.select().from(prompts).where(eq(prompts.videoSourceId, videoSourceId));
+  }
+
+  async deletePromptsByVideoSource(videoSourceId: string): Promise<void> {
+    const sourcePrompts = await this.getPromptsByVideoSource(videoSourceId);
+    for (const prompt of sourcePrompts) {
+      await db.delete(alerts).where(eq(alerts.promptId, prompt.id));
+    }
+    await db.delete(prompts).where(eq(prompts.videoSourceId, videoSourceId));
   }
 
   async getPrompt(id: string): Promise<Prompt | undefined> {

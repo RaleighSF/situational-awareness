@@ -3,17 +3,6 @@ import { pgTable, text, varchar, integer, boolean, timestamp, jsonb } from "driz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const videoSources = pgTable("video_sources", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  url: text("url").notNull(),
-  isActive: boolean("is_active").default(true),
-});
-
-export const videoSourcesRelations = relations(videoSources, ({ many }) => ({
-  prompts: many(prompts),
-}));
-
 export const boundingBoxSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -22,6 +11,25 @@ export const boundingBoxSchema = z.object({
 });
 
 export type BoundingBox = z.infer<typeof boundingBoxSchema>;
+
+export const sourceSettingsSchema = z.object({
+  boundingBox: z.union([boundingBoxSchema, z.null()]).optional(),
+  sceneContext: z.string().max(500).optional(),
+});
+
+export type SourceSettings = z.infer<typeof sourceSettingsSchema>;
+
+export const videoSources = pgTable("video_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  isActive: boolean("is_active").default(true),
+  settings: jsonb("settings").$type<SourceSettings | null>(),
+});
+
+export const videoSourcesRelations = relations(videoSources, ({ many }) => ({
+  prompts: many(prompts),
+}));
 
 export const prompts = pgTable("prompts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -58,7 +66,9 @@ export const alertsRelations = relations(alerts, ({ one }) => ({
   }),
 }));
 
-export const insertVideoSourceSchema = createInsertSchema(videoSources).omit({ id: true });
+export const insertVideoSourceSchema = createInsertSchema(videoSources, {
+  settings: z.union([sourceSettingsSchema, z.null()]).optional(),
+}).omit({ id: true });
 
 export const insertPromptSchema = createInsertSchema(prompts, {
   boundingBox: z.union([boundingBoxSchema, z.null()]).optional(),
