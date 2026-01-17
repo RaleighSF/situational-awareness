@@ -490,8 +490,8 @@ export default function Dashboard() {
     const intervalSeconds = 4;
     const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1;
     
-    const VISUAL_RECORDING_DURATION = 60;
-    const VISUAL_ANALYZING_DURATION = 12;
+    const VISUAL_RECORDING_DURATION = 30;
+    const VISUAL_ANALYZING_DURATION = 10;
 
     setIsSceneAgentRunning(true);
     setSceneAgentPhase("recording");
