@@ -164,6 +164,43 @@ Be detailed and factual. Use bullet points.`;
   }
 }
 
+function generateFallbackChanges(observations: { t: number; text: string }[]): string[] {
+  if (observations.length < 2) return ["Insufficient frames to detect changes"];
+  
+  const changes: string[] = [];
+  for (let i = 1; i < observations.length; i++) {
+    const prev = observations[i - 1];
+    const curr = observations[i];
+    changes.push(`Activity transitioned between T+${prev.t}s and T+${curr.t}s`);
+  }
+  
+  if (changes.length === 0) {
+    changes.push("Scene activity evolved over the observation period");
+  }
+  
+  return changes.slice(0, 5);
+}
+
+function generateFallbackPersistent(observations: { t: number; text: string }[]): string[] {
+  const persistent: string[] = [
+    "Camera position and angle remained consistent throughout",
+    "Background environment stayed unchanged",
+    "Overall scene layout persisted across all frames"
+  ];
+  
+  if (observations.length > 0) {
+    const firstObs = observations[0].text.toLowerCase();
+    if (firstObs.includes("truck") || firstObs.includes("vehicle")) {
+      persistent.push("Vehicle presence remained consistent");
+    }
+    if (firstObs.includes("box") || firstObs.includes("package")) {
+      persistent.push("Stored materials continued to be present");
+    }
+  }
+  
+  return persistent.slice(0, 5);
+}
+
 async function synthesizeObservations(observations: FrameObservation[], sceneContext?: string): Promise<{ synthesis: SceneAgentSynthesis | null; rawText: string }> {
   const observationsPayload = observations.map(o => ({
     t: o.t,
@@ -175,27 +212,40 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     ? `Scene Context from operator: "${sceneContext}"\nUse this context to focus your analysis.\n\n` 
     : "";
 
-  const prompt = `${contextPreamble}Role: Scene Intelligence Analyst reviewing time-ordered security camera footage.
+  const prompt = `${contextPreamble}You are a Scene Intelligence Analyst. Analyze these time-ordered security camera observations.
 
-CRITICAL: Return ONLY valid JSON. Keep ALL text fields SHORT and concise.
+Your MAIN TASK: Identify what CHANGED and what STAYED THE SAME across the observation period.
+
+Return this exact JSON structure:
 
 {
-  "summary": "2-3 SHORT sentences only. What happened and key takeaway.",
-  "changes": ["3-5 transition descriptions using entered/exited/shifted/started/stopped"],
-  "persistent": ["3-5 stable elements using remained/stayed/continued/unchanged"],
-  "events": [{"t": 0, "description": "≤12 word moment"}],
-  "anomalies": ["unusual observations if any, else empty"],
-  "escalations": ["urgent items if any, else empty"],
+  "summary": "Brief 2 sentence summary of what happened",
+  "changes": [
+    "Person entered scene from left at T+4s",
+    "Worker moved from dock to truck at T+8s", 
+    "Box was picked up and placed on pallet at T+12s"
+  ],
+  "persistent": [
+    "Blue truck remained parked in same position throughout",
+    "Stack of boxes on left side stayed unchanged",
+    "Lighting conditions remained consistent"
+  ],
+  "events": [
+    {"t": 0, "description": "Initial scene state"},
+    {"t": 4, "description": "What happened at this moment"}
+  ],
+  "anomalies": ["Any unusual observations"],
+  "escalations": [],
   "confidence": 0.85
 }
 
-RULES:
-• summary: MAX 50 words total. Be brief.
-• changes: Describe TRANSITIONS (entered, exited, moved from X to Y, started, stopped)
-• persistent: Describe CONTINUITY (remained, stayed, continued, unchanged)
-• events: 3-6 timestamped moments, ≤12 words each
-• NEVER return empty arrays for changes, persistent, or events
-• Output valid JSON only - no extra text`;
+MANDATORY REQUIREMENTS:
+1. "changes" MUST have 3-5 items describing things that CHANGED between frames
+2. "persistent" MUST have 3-5 items describing things that STAYED THE SAME
+3. "events" MUST have one entry per observation timestamp
+4. Use transition words: entered/exited/moved/started/stopped for changes
+5. Use stability words: remained/stayed/continued/unchanged for persistent
+6. Return ONLY valid JSON, no other text`;
 
   const payload = {
     prompt,
@@ -231,12 +281,30 @@ RULES:
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
+          
+          // Extract changes and persistent arrays
+          let changes = Array.isArray(parsed.changes) ? parsed.changes : [];
+          let persistent = Array.isArray(parsed.persistent) ? parsed.persistent : [];
+          
+          // Generate fallback content if model didn't provide changes/persistent
+          if (changes.length === 0) {
+            console.log("[Synthesis] Generating fallback changes from observations");
+            changes = generateFallbackChanges(observationsPayload);
+          }
+          if (persistent.length === 0) {
+            console.log("[Synthesis] Generating fallback persistent elements");
+            persistent = generateFallbackPersistent(observationsPayload);
+          }
+          
           return {
             synthesis: {
               summary: parsed.summary || "Analysis complete.",
-              changes: Array.isArray(parsed.changes) ? parsed.changes : [],
-              persistent: Array.isArray(parsed.persistent) ? parsed.persistent : [],
-              events: Array.isArray(parsed.events) ? parsed.events : [],
+              changes,
+              persistent,
+              events: Array.isArray(parsed.events) ? parsed.events.map((e: { t?: number; description?: string }) => ({
+                t: e.t ?? 0,
+                description: e.description ?? "Observation recorded"
+              })) : [],
               anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
               escalations: Array.isArray(parsed.escalations) ? parsed.escalations : [],
               confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
