@@ -1,6 +1,18 @@
 # Situational Awareness Demo
 
+**Version 1.0** - Milestone release (January 2026)
+
 A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision language model for security monitoring and situational awareness.
+
+## Version History
+
+### v1.0 (Current)
+- Batch inference via `/infer_batch` endpoint (single network call for all frames)
+- Scene Agent with 30-second recording phase, 10-second analysis phase
+- Optimized UI timing to match actual batch processing performance
+- Subtle glow effects during recording/analysis phases
+- Schema improvements for null handling in scene agent events
+- Accessibility improvements for modal dialogs
 
 ## Overview
 
@@ -14,7 +26,7 @@ This application demonstrates how AI-powered vision analysis can automate securi
 - **Configurable Frequency**: Set how often each rule should be analyzed (5-300 seconds)
 - **Real-time Alerts**: Get notified when the AI detects conditions matching your rules
 - **Alert History**: View past detections with frame captures and analysis details
-- **Scene Agent**: Temporal reasoning analysis that captures frames over 30 seconds and synthesizes changes, persistent elements, and anomalies
+- **Scene Agent**: Temporal reasoning analysis that captures 6 frames over 20 seconds, processes them via batch inference, and synthesizes a structured report with summary, timeline events, anomalies, and escalations
 
 ## Technology Stack
 
