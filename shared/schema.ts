@@ -101,8 +101,6 @@ export const sceneAgentEventSchema = z.object({
 
 export const sceneAgentSynthesisSchema = z.object({
   summary: z.string(),
-  changes: z.array(z.string()),
-  persistent: z.array(z.string()),
   events: z.array(sceneAgentEventSchema),
   anomalies: z.array(z.string()),
   escalations: z.array(z.string()),
