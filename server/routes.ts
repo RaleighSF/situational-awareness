@@ -7,6 +7,9 @@ import { storage } from "./storage";
 import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema, sceneAgentSynthesisSchema, sourceSettingsSchema } from "@shared/schema";
 import type { BoundingBox, FrameObservation, SceneAgentSynthesis, SceneAgentResult } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
+import { ObjectStorageService, ObjectNotFoundError } from "./replit_integrations/object_storage";
+
+const objectStorageService = new ObjectStorageService();
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -630,6 +633,62 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error uploading video:", error);
       res.status(500).json({ error: "Failed to upload video" });
+    }
+  });
+
+  app.post("/api/video-sources/request-upload-url", async (req, res) => {
+    try {
+      const { name, contentType } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: "Video name is required" });
+      }
+      const allowedTypes = ["video/mp4", "video/webm", "video/ogg", "video/quicktime"];
+      if (contentType && !allowedTypes.includes(contentType)) {
+        return res.status(400).json({ error: "Invalid video type. Only MP4, WebM, OGG, and MOV are allowed." });
+      }
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      res.json({ uploadURL, objectPath, name });
+    } catch (error) {
+      console.error("Error generating video upload URL:", error);
+      res.status(500).json({ error: "Failed to generate upload URL" });
+    }
+  });
+
+  app.post("/api/video-sources/complete-upload", async (req, res) => {
+    try {
+      const { name, objectPath } = req.body;
+      if (!name || !objectPath) {
+        return res.status(400).json({ error: "Name and objectPath are required" });
+      }
+      await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+        owner: "system",
+        visibility: "public",
+      });
+      const source = await storage.createVideoSource({
+        name,
+        url: objectPath,
+        isActive: true,
+        settings: null,
+      });
+      res.status(201).json(source);
+    } catch (error) {
+      console.error("Error completing video upload:", error);
+      res.status(500).json({ error: "Failed to complete video upload" });
+    }
+  });
+
+  app.get("/objects/*", async (req, res) => {
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      res.setHeader("Accept-Ranges", "bytes");
+      await objectStorageService.downloadObject(objectFile, res, 86400);
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        return res.status(404).json({ error: "Video not found" });
+      }
+      console.error("Error serving object:", error);
+      res.status(500).json({ error: "Failed to serve video" });
     }
   });
 
