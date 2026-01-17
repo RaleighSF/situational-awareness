@@ -182,20 +182,20 @@ export default function Dashboard() {
         body: formData,
       });
       
+      const text = await res.text();
+      
       if (!res.ok) {
         let errorMessage = "Failed to upload video";
         try {
-          const error = await res.json();
+          const error = JSON.parse(text);
           errorMessage = error.error || errorMessage;
         } catch {
-          const text = await res.text();
           if (text) errorMessage = text;
         }
         throw new Error(errorMessage);
       }
       
-      const data = await res.json();
-      return data as VideoSource;
+      return JSON.parse(text) as VideoSource;
     },
     onSuccess: (newSource: VideoSource) => {
       queryClient.invalidateQueries({ queryKey: ["/api/video-sources"] });
