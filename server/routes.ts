@@ -163,7 +163,12 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
     confidence: o.confidence,
   }));
 
-  const prompt = `Synthesize the time-ordered observations from a single camera into the required JSON format. In summary, give a brief overview and explicitly note what remained consistent throughout the window. Populate events[] with a chronological list of meaningful changes or notable moments (include t in seconds). Use anomalies[] only for unexpected transitions or sharp confidence changes. Use escalations[] for conditions that persist or worsen across multiple observations. Set confidence (0-1) to reflect overall certainty. Return JSON only.
+  const prompt = `Return JSON only in the required schema. Keep it concise and executive-friendly.
+summary: 2-3 sentences max, focused on what is happening overall and the most important takeaway. No scene-detail lists.
+events: include only 3-6 key timeline moments (not every frame), each description max 12 words.
+anomalies: use as "Notable Changes" bullets (max 3-5 items, each max 12 words) - only include deltas (entries/exits, new objects, motion start/stop, confidence jumps).
+escalations: only if action is recommended; max 1-2 bullets.
+confidence: 0-1 reflecting overall certainty.
 
 {"summary": "...", "events": [{"t": 0, "description": "..."}], "anomalies": [], "escalations": [], "confidence": 0.85}`;
 

@@ -7,7 +7,9 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Clock, AlertTriangle, AlertOctagon } from "lucide-react";
+import { Clock, AlertTriangle, AlertOctagon, ChevronDown } from "lucide-react";
+import { useState } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { SceneAgentResult } from "@shared/schema";
 
 interface SceneAgentModalProps {
@@ -91,7 +93,7 @@ export function SceneAgentModal({
                     <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 p-4">
                       <div className="flex items-center gap-2 mb-3">
                         <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                        <h3 className="font-medium text-amber-900 dark:text-amber-100">Notable Observations</h3>
+                        <h3 className="font-medium text-amber-900 dark:text-amber-100">Notable Changes</h3>
                       </div>
                       <ul className="space-y-2">
                         {synthesis.anomalies.map((item, i) => (
@@ -108,7 +110,7 @@ export function SceneAgentModal({
             )}
 
 
-            {result.observations.length > 0 && (
+            {hasValidSynthesis && synthesis.events.length > 0 && (
               <>
                 <Separator />
                 <div>
@@ -119,19 +121,35 @@ export function SceneAgentModal({
                   <div className="relative">
                     <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
                     <div className="space-y-4">
-                      {result.observations.map((obs, index) => (
-                        <div key={index} className="relative pl-6" data-testid={`timeline-entry-${index}`}>
-                          <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full bg-background border-2 border-muted-foreground" />
-                          <div>
-                            <span className="text-xs font-medium text-foreground">
-                              T+{obs.t}s
-                            </span>
-                            <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
-                              {obs.text}
-                            </p>
+                      {synthesis.events.map((event, index) => {
+                        const matchingObs = result.observations.find(o => o.t === event.t);
+                        return (
+                          <div key={index} className="relative pl-6" data-testid={`timeline-entry-${index}`}>
+                            <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full bg-background border-2 border-muted-foreground" />
+                            <div>
+                              <span className="text-xs font-medium text-foreground">
+                                T+{event.t}s
+                              </span>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {event.description}
+                              </p>
+                              {matchingObs && (
+                                <Collapsible>
+                                  <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground/70 hover:text-muted-foreground mt-2 hover-elevate">
+                                    <ChevronDown className="h-3 w-3" />
+                                    <span>Frame details</span>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <p className="text-xs text-muted-foreground/70 mt-2 pl-4 border-l border-border whitespace-pre-line">
+                                      {matchingObs.text}
+                                    </p>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
