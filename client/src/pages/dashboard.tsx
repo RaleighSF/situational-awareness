@@ -29,11 +29,38 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Prompt, Alert, BoundingBox } from "@shared/schema";
 
-const REMOTE_VIDEO_URL = "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-const DEFAULT_VIDEO_URL = `/api/video/proxy?url=${encodeURIComponent(REMOTE_VIDEO_URL)}`;
+const VIDEO_SOURCES = [
+  {
+    id: "got-commercial",
+    name: "GoT Commercial",
+    url: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+  },
+  {
+    id: "loading-dock",
+    name: "Loading Dock",
+    url: "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4",
+  },
+];
+
+const getVideoUrl = (sourceId: string) => {
+  const source = VIDEO_SOURCES.find(s => s.id === sourceId);
+  if (!source) return "";
+  if (source.url.startsWith("/")) {
+    return source.url;
+  }
+  return `/api/video/proxy?url=${encodeURIComponent(source.url)}`;
+};
 
 interface PromptSchedule {
   promptId: string;
@@ -45,6 +72,7 @@ interface PromptSchedule {
 export default function Dashboard() {
   const { toast } = useToast();
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
+  const [currentVideoSource, setCurrentVideoSource] = useState("got-commercial");
   const [isPlaying, setIsPlaying] = useState(true);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [currentBoundingBox, setCurrentBoundingBox] = useState<BoundingBox | null>(null);
@@ -519,9 +547,25 @@ export default function Dashboard() {
               </Button>
             </div>
 
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm text-muted-foreground">Source:</span>
+              <Select value={currentVideoSource} onValueChange={setCurrentVideoSource}>
+                <SelectTrigger className="w-48" data-testid="select-video-source">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {VIDEO_SOURCES.map((source) => (
+                    <SelectItem key={source.id} value={source.id} data-testid={`video-source-${source.id}`}>
+                      {source.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <VideoPlayer
               ref={videoPlayerRef}
-              videoUrl={DEFAULT_VIDEO_URL}
+              videoUrl={getVideoUrl(currentVideoSource)}
               isPlaying={isPlaying}
               onPlayPause={() => setIsPlaying(!isPlaying)}
               onBoundingBoxChange={setCurrentBoundingBox}
