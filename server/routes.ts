@@ -232,13 +232,17 @@ Be concise but thorough. If you detect the specified condition, explain exactly 
   }
 }
 
-async function analyzeWithCosmosAdhocDirect(frameData: string, userPrompt: string): Promise<string> {
+async function analyzeWithCosmosAdhocDirect(frameData: string, userPrompt: string, sceneContext?: string): Promise<string> {
   const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
   const base64Data = dataUrlMatch 
     ? frameData.slice(dataUrlMatch[0].length)
     : frameData;
 
-  const prompt = `You are a helpful AI assistant analyzing an image. The user has asked:
+  const contextPreamble = sceneContext 
+    ? `Scene Context: ${sceneContext}\n\n` 
+    : "";
+
+  const prompt = `${contextPreamble}You are a helpful AI assistant analyzing an image. The user has asked:
 
 "${userPrompt}"
 
@@ -271,7 +275,7 @@ Please provide a clear, accurate, and helpful response based on what you observe
   return content;
 }
 
-async function analyzeWithCosmosAdhoc(frameData: string, userPrompt: string): Promise<{ result: string; model: string }> {
+async function analyzeWithCosmosAdhoc(frameData: string, userPrompt: string, sceneContext?: string): Promise<{ result: string; model: string }> {
   if (!frameData || frameData.length < 100) {
     return { result: "Invalid frame captured - video may not be loaded", model: "none" };
   }
@@ -288,14 +292,14 @@ async function analyzeWithCosmosAdhoc(frameData: string, userPrompt: string): Pr
       return { result, model: "gpt-4o" };
     } catch (error) {
       console.error("[ROUTER] GPT-4o failed, falling back to Cosmos:", error);
-      const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt);
+      const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt, sceneContext);
       return { result, model: "cosmos-reason2" };
     }
   }
   */
 
   // Direct route to Cosmos for all queries
-  const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt);
+  const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt, sceneContext);
   return { result, model: "cosmos-reason2" };
 }
 
@@ -769,13 +773,13 @@ export async function registerRoutes(
 
   app.post("/api/analyze-adhoc", async (req, res) => {
     try {
-      const { frameData, prompt } = req.body;
+      const { frameData, prompt, sceneContext } = req.body;
 
       if (!frameData || !prompt) {
         return res.status(400).json({ error: "frameData and prompt are required" });
       }
 
-      const { result, model } = await analyzeWithCosmosAdhoc(frameData, prompt.trim());
+      const { result, model } = await analyzeWithCosmosAdhoc(frameData, prompt.trim(), sceneContext);
       res.json({ analysis: result, model });
     } catch (error) {
       console.error("Error in ad-hoc analysis:", error);

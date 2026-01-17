@@ -1167,6 +1167,7 @@ export default function Dashboard() {
           setQuickAnalysisFrame(null);
         }}
         frameData={quickAnalysisFrame}
+        sceneContext={sceneAgentContext}
       />
 
       <Dialog open={isUploadDialogOpen} onOpenChange={(open) => !open && handleUploadCancel()}>
