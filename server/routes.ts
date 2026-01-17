@@ -532,10 +532,16 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/alerts", async (_req, res) => {
+  app.get("/api/alerts", async (req, res) => {
     try {
-      const alerts = await storage.getAlerts();
-      res.json(alerts);
+      const { videoSourceId } = req.query;
+      let alertList;
+      if (videoSourceId && typeof videoSourceId === "string") {
+        alertList = await storage.getAlertsByVideoSource(videoSourceId);
+      } else {
+        alertList = await storage.getAlerts();
+      }
+      res.json(alertList);
     } catch (error) {
       console.error("Error fetching alerts:", error);
       res.status(500).json({ error: "Failed to fetch alerts" });

@@ -11,7 +11,7 @@ import {
   alerts,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getVideoSources(): Promise<VideoSource[]>;
@@ -109,6 +109,13 @@ export class DatabaseStorage implements IStorage {
 
   async getAlertsByPrompt(promptId: string): Promise<Alert[]> {
     return db.select().from(alerts).where(eq(alerts.promptId, promptId)).orderBy(desc(alerts.timestamp));
+  }
+
+  async getAlertsByVideoSource(videoSourceId: string): Promise<Alert[]> {
+    const sourcePrompts = await this.getPromptsByVideoSource(videoSourceId);
+    const promptIds = sourcePrompts.map(p => p.id);
+    if (promptIds.length === 0) return [];
+    return db.select().from(alerts).where(inArray(alerts.promptId, promptIds)).orderBy(desc(alerts.timestamp));
   }
 
   async getAlert(id: string): Promise<Alert | undefined> {

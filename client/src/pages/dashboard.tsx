@@ -11,6 +11,7 @@ import { SceneAgentModal } from "@/components/scene-agent-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -105,6 +106,10 @@ export default function Dashboard() {
   const [sceneAgentContext, setSceneAgentContext] = useState("");
   const [isSceneAgentSettingsOpen, setIsSceneAgentSettingsOpen] = useState(false);
   const sceneAgentFramesRef = useRef<string[]>([]);
+  
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [uploadFileName, setUploadFileName] = useState("");
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
 
   const { data: videoSources = [], isLoading: sourcesLoading } = useQuery<VideoSource[]>({
     queryKey: ["/api/video-sources"],
@@ -140,7 +145,14 @@ export default function Dashboard() {
   });
 
   const { data: alerts = [] } = useQuery<Alert[]>({
-    queryKey: ["/api/alerts"],
+    queryKey: ["/api/alerts", currentVideoSourceId],
+    queryFn: async () => {
+      if (!currentVideoSourceId) return [];
+      const res = await fetch(`/api/alerts?videoSourceId=${currentVideoSourceId}`);
+      if (!res.ok) throw new Error("Failed to fetch alerts");
+      return res.json();
+    },
+    enabled: !!currentVideoSourceId,
     refetchInterval: isAnalyzing ? 5000 : false,
   });
 
@@ -155,10 +167,10 @@ export default function Dashboard() {
   });
 
   const uploadVideoMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, name }: { file: File; name: string }) => {
       const formData = new FormData();
       formData.append("video", file);
-      formData.append("name", file.name.replace(/\.[^/.]+$/, ""));
+      formData.append("name", name);
       const res = await fetch("/api/video-sources/upload", {
         method: "POST",
         body: formData,
@@ -172,6 +184,9 @@ export default function Dashboard() {
     onSuccess: (newSource: VideoSource) => {
       queryClient.invalidateQueries({ queryKey: ["/api/video-sources"] });
       setCurrentVideoSourceId(newSource.id);
+      setIsUploadDialogOpen(false);
+      setPendingUploadFile(null);
+      setUploadFileName("");
       toast({ title: "Video uploaded", description: `"${newSource.name}" is now available as a source.` });
     },
     onError: (error) => {
@@ -200,14 +215,28 @@ export default function Dashboard() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      uploadVideoMutation.mutate(file);
+      setPendingUploadFile(file);
+      setUploadFileName(file.name.replace(/\.[^/.]+$/, ""));
+      setIsUploadDialogOpen(true);
     }
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const handleUploadConfirm = () => {
+    if (pendingUploadFile && uploadFileName.trim()) {
+      uploadVideoMutation.mutate({ file: pendingUploadFile, name: uploadFileName.trim() });
+    }
+  };
+
+  const handleUploadCancel = () => {
+    setIsUploadDialogOpen(false);
+    setPendingUploadFile(null);
+    setUploadFileName("");
   };
 
   const saveSourceSettings = useCallback((settings: Partial<SourceSettings>) => {
@@ -266,7 +295,7 @@ export default function Dashboard() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts", currentVideoSourceId] });
     },
   });
 
@@ -275,7 +304,7 @@ export default function Dashboard() {
       await apiRequest("DELETE", "/api/alerts");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts", currentVideoSourceId] });
       toast({ title: "All alerts cleared" });
     },
   });
@@ -291,7 +320,7 @@ export default function Dashboard() {
     },
     onSuccess: (data) => {
       if (data.alertCreated) {
-        queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/alerts", currentVideoSourceId] });
         toast({
           title: "Alert detected!",
           description: "A new detection has been found.",
@@ -843,7 +872,7 @@ export default function Dashboard() {
                 ref={fileInputRef}
                 type="file"
                 accept="video/mp4,video/webm,video/ogg,video/quicktime"
-                onChange={handleFileUpload}
+                onChange={handleFileSelect}
                 className="hidden"
                 data-testid="input-video-upload"
               />
@@ -1122,6 +1151,42 @@ export default function Dashboard() {
         onRefresh={startSceneAgent}
         isRefreshing={isSceneAgentRunning}
       />
+
+      <Dialog open={isUploadDialogOpen} onOpenChange={(open) => !open && handleUploadCancel()}>
+        <DialogContent className="max-w-md" data-testid="dialog-upload-name">
+          <DialogHeader>
+            <DialogTitle>Name Your Video Source</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-4">
+            Enter a friendly name for this video source. This will be displayed in the source dropdown.
+          </p>
+          <Input
+            value={uploadFileName}
+            onChange={(e) => setUploadFileName(e.target.value)}
+            placeholder="e.g., Front Entrance Camera"
+            data-testid="input-upload-name"
+          />
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={handleUploadCancel} data-testid="button-upload-cancel">
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleUploadConfirm} 
+              disabled={!uploadFileName.trim() || uploadVideoMutation.isPending}
+              data-testid="button-upload-confirm"
+            >
+              {uploadVideoMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Uploading...
+                </>
+              ) : (
+                "Upload"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
