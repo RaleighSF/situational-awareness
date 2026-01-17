@@ -175,6 +175,7 @@ Based on this sequence, provide a temporal analysis in EXACTLY this JSON format:
 
 Focus on temporal patterns - what evolved, what remained stable, and any notable events. Return ONLY the JSON object, no other text.`;
 
+  // Extract base64 data from the last frame (remove data URL prefix if present)
   const imageBase64 = lastFrame.includes(",") ? lastFrame.split(",")[1] : lastFrame;
 
   const payload = {
@@ -433,38 +434,23 @@ export async function registerRoutes(
       
       const { frames, intervalSeconds, durationSeconds } = parseResult.data;
 
-      console.log(`[Scene Agent] Starting analysis of ${frames.length} frames over ${durationSeconds}s (batched concurrency)`);
+      console.log(`[Scene Agent] Starting analysis of ${frames.length} frames over ${durationSeconds}s`);
       const startTime = new Date().toISOString();
 
       const observations: FrameObservation[] = [];
-      const BATCH_SIZE = 2;
-      
-      for (let batchStart = 0; batchStart < frames.length; batchStart += BATCH_SIZE) {
-        const batchEnd = Math.min(batchStart + BATCH_SIZE, frames.length);
-        const batchFrames = frames.slice(batchStart, batchEnd);
+      for (let i = 0; i < frames.length; i++) {
+        const timestampOffset = i * intervalSeconds;
+        console.log(`[Scene Agent] Analyzing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
         
-        console.log(`[Scene Agent] Processing batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: frames ${batchStart + 1}-${batchEnd}`);
-        
-        const batchPromises = batchFrames.map(async (frame, batchIndex) => {
-          const i = batchStart + batchIndex;
-          const timestampOffset = i * intervalSeconds;
-          console.log(`[Scene Agent] Analyzing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
-          
-          const observation = await getSceneObservation(frame);
-          return {
-            index: i,
-            timestampOffset,
-            observation,
-          };
+        const observation = await getSceneObservation(frames[i]);
+        observations.push({
+          index: i,
+          timestampOffset,
+          observation,
         });
-        
-        const batchResults = await Promise.all(batchPromises);
-        observations.push(...batchResults);
       }
-      
-      observations.sort((a, b) => a.index - b.index);
 
-      console.log(`[Scene Agent] All ${observations.length} observations complete, synthesizing`);
+      console.log(`[Scene Agent] Synthesizing ${observations.length} observations`);
       const lastFrame = frames[frames.length - 1];
       const synthesis = await synthesizeObservations(observations, lastFrame);
 

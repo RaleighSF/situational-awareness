@@ -510,7 +510,7 @@ export default function Dashboard() {
     const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1;
 
     setIsSceneAgentRunning(true);
-    setSceneAgentProgress("");
+    setSceneAgentProgress(`Watching for ${durationSeconds} seconds...`);
     sceneAgentFramesRef.current = [];
 
     try {
@@ -527,6 +527,10 @@ export default function Dashboard() {
       }
 
       for (let i = 0; i < frameCount; i++) {
+        const secondsElapsed = i * intervalSeconds;
+        const secondsRemaining = durationSeconds - secondsElapsed;
+        setSceneAgentProgress(secondsRemaining > 0 ? `${secondsRemaining} seconds remaining...` : `Finishing observation...`);
+        
         const frameData = videoPlayerRef.current?.captureFrame(currentBoundingBox);
         if (frameData) {
           sceneAgentFramesRef.current.push(frameData);
@@ -551,13 +555,7 @@ export default function Dashboard() {
         return;
       }
 
-      setSceneAgentProgress("Observations...");
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setSceneAgentProgress("Summarizing...");
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setSceneAgentProgress("Detecting Changes...");
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setSceneAgentProgress("Building Timeline...");
+      setSceneAgentProgress(`Processing observations...`);
 
       const response = await apiRequest("POST", "/api/scene-agent/run", {
         frames: sceneAgentFramesRef.current,
@@ -675,7 +673,7 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            <div className={`relative rounded-lg ${isSceneAgentRunning ? "scene-agent-glow" : ""}`}>
+            <div className="relative">
               <VideoPlayer
                 ref={videoPlayerRef}
                 videoUrl={getVideoUrl(currentVideoSource)}
@@ -686,9 +684,10 @@ export default function Dashboard() {
                 isDrawingMode={isDrawingMode}
               />
               {isSceneAgentRunning && (
-                <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center rounded-lg" data-testid="scene-agent-overlay">
-                  <Loader2 className="h-10 w-10 text-primary animate-spin mb-3" />
-                  <p className="text-white text-base font-medium">{sceneAgentProgress || "Observing..."}</p>
+                <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center rounded-lg" data-testid="scene-agent-overlay">
+                  <Loader2 className="h-12 w-12 text-white animate-spin mb-4" />
+                  <p className="text-white text-lg font-medium">Monitoring the situation...</p>
+                  <p className="text-white/70 text-sm mt-2">{sceneAgentProgress}</p>
                 </div>
               )}
             </div>
