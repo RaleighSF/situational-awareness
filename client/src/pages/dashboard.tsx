@@ -74,7 +74,7 @@ interface PromptSchedule {
 export default function Dashboard() {
   const { toast } = useToast();
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
-  const [currentVideoSource, setCurrentVideoSource] = useState("got-commercial");
+  const [currentVideoSource, setCurrentVideoSource] = useState("loading-dock");
   const [isPlaying, setIsPlaying] = useState(true);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [currentBoundingBox, setCurrentBoundingBox] = useState<BoundingBox | null>(null);
