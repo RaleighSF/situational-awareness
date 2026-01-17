@@ -125,8 +125,8 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
       }
 
       const targetBox = box ?? currentBox;
-      const MAX_DIMENSION = 480;
-      const JPEG_QUALITY = 0.5;
+      const MAX_DIMENSION = 720;
+      const JPEG_QUALITY = 0.7;
 
       try {
         let srcX = 0, srcY = 0;
