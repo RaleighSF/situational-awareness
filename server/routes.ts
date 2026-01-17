@@ -276,6 +276,9 @@ async function analyzeWithCosmosAdhoc(frameData: string, userPrompt: string): Pr
     return { result: "Invalid frame captured - video may not be loaded", model: "none" };
   }
 
+  // NOTE: Intelligent routing code preserved but bypassed for fastest response times
+  // To re-enable routing, uncomment the block below:
+  /*
   const questionType = classifyPrompt(userPrompt);
   
   if (questionType === "precision" && OPENAI_API_KEY) {
@@ -288,11 +291,12 @@ async function analyzeWithCosmosAdhoc(frameData: string, userPrompt: string): Pr
       const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt);
       return { result, model: "cosmos-reason2" };
     }
-  } else {
-    console.log("[ROUTER] Routing to Cosmos-Reason2 for situational analysis");
-    const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt);
-    return { result, model: "cosmos-reason2" };
   }
+  */
+
+  // Direct route to Cosmos for all queries
+  const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt);
+  return { result, model: "cosmos-reason2" };
 }
 
 async function getBatchSceneObservations(
