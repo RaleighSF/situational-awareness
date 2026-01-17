@@ -11,9 +11,10 @@ This application demonstrates how AI-powered vision analysis can automate securi
 - **Video Feed Monitoring**: Displays a looped video feed with playback controls
 - **Bounding Box Drawing**: Draw regions of interest on the video to focus AI analysis on specific areas
 - **Detection Rules**: Create custom prompts that describe what the AI should look for
-- **Configurable Frequency**: Set how often each rule should be analyzed (10-300 seconds)
+- **Configurable Frequency**: Set how often each rule should be analyzed (5-300 seconds)
 - **Real-time Alerts**: Get notified when the AI detects conditions matching your rules
 - **Alert History**: View past detections with frame captures and analysis details
+- **Scene Agent**: Temporal reasoning analysis that captures frames over 30 seconds and synthesizes changes, persistent elements, and anomalies
 
 ## Technology Stack
 
@@ -56,6 +57,7 @@ This application demonstrates how AI-powered vision analysis can automate securi
 - `PATCH /api/alerts/:id` - Update an alert (mark as read)
 - `DELETE /api/alerts` - Clear all alerts
 - `POST /api/analyze` - Analyze a video frame with a specific prompt
+- `POST /api/scene-agent/run` - Run Scene Agent temporal analysis on captured frames
 - `GET /api/cosmos/health` - Check Cosmos endpoint health status
 - `GET /api/video/proxy` - Proxy video streams with CORS headers
 - `GET /api/test/frame` - Get a test frame for fallback testing
