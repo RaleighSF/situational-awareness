@@ -242,7 +242,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Prompt not found" });
       }
 
-      const result = await analyzeWithCosmos(frameData, prompt.prompt, prompt.boundingBox);
+      const result = await analyzeWithCosmos(frameData, prompt.prompt, null);
 
       let alertCreated = false;
       if (result.detected) {
