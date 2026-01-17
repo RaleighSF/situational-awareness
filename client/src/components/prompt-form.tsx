@@ -29,7 +29,7 @@ import type { Prompt, BoundingBox } from "@shared/schema";
 const promptFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   prompt: z.string().min(10, "Prompt must be at least 10 characters"),
-  frequencySeconds: z.number().min(10).max(300),
+  frequencySeconds: z.number().min(5).max(300),
   isActive: z.boolean(),
   useBoundingBox: z.boolean(),
 });
@@ -153,9 +153,9 @@ export function PromptForm({
                   <FormLabel>Check Frequency: {field.value} seconds</FormLabel>
                   <FormControl>
                     <Slider
-                      min={10}
+                      min={5}
                       max={300}
-                      step={10}
+                      step={5}
                       value={[field.value]}
                       onValueChange={([value]) => field.onChange(value)}
                       data-testid="slider-frequency"
