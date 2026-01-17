@@ -6,7 +6,13 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.0 (Current)
+### v1.1 (Current)
+- Source-specific profiles: Each video source maintains independent detection rules, bounding boxes, and Scene Agent settings
+- Database-driven video sources with settings stored in video_sources.settings JSONB column
+- Prompts filtered by videoSourceId for source-specific rule management
+- Scene context persisted per-source instead of global localStorage
+
+### v1.0
 - Batch inference via `/infer_batch` endpoint (single network call for all frames)
 - Scene Agent with 30-second recording phase, 10-second analysis phase
 - Optimized UI timing to match actual batch processing performance
@@ -61,8 +67,10 @@ This application demonstrates how AI-powered vision analysis can automate securi
 
 ## API Endpoints
 
-- `GET /api/prompts` - List all detection rules
-- `POST /api/prompts` - Create a new detection rule
+- `GET /api/video-sources` - List all video sources with settings
+- `PATCH /api/video-sources/:id/settings` - Update source settings (boundingBox, sceneContext)
+- `GET /api/prompts?videoSourceId=xxx` - List detection rules for a specific source
+- `POST /api/prompts` - Create a new detection rule (requires videoSourceId)
 - `PATCH /api/prompts/:id` - Update a detection rule
 - `DELETE /api/prompts/:id` - Delete a detection rule
 - `GET /api/alerts` - List all alerts
@@ -92,10 +100,11 @@ Note: The COSMOS_ENDPOINT points to a self-hosted Cosmos Reason 2 inference serv
 ## Data Models
 
 ### VideoSource
-- Video feed configuration (id, name, url, isActive)
+- Video feed configuration (id, name, url, isActive, settings)
+- settings: JSONB column containing boundingBox and sceneContext per source
 
 ### Prompt
-- Detection rules with name, prompt text, bounding box, frequency, active status
+- Detection rules with name, prompt text, bounding box, frequency, active status, videoSourceId
 
 ### Alert
 - Detection events with timestamp, frame data, analysis result, confidence
