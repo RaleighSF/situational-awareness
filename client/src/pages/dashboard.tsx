@@ -904,7 +904,7 @@ export default function Dashboard() {
                   <Upload className="h-4 w-4" />
                 )}
               </Button>
-              {(currentSource?.url.startsWith("/uploads/") || currentSource?.url.startsWith("/objects/")) && (
+              {currentSource && !currentSource.url.startsWith("/attached_assets/") && (
                 <Button
                   variant="outline"
                   size="icon"
