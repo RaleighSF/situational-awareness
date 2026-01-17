@@ -146,6 +146,53 @@ Be concise but thorough. If you detect the specified condition, explain exactly 
   }
 }
 
+async function analyzeWithCosmosAdhoc(frameData: string, userPrompt: string): Promise<string> {
+  if (!frameData || frameData.length < 100) {
+    return "Invalid frame captured - video may not be loaded";
+  }
+
+  const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
+  const base64Data = dataUrlMatch 
+    ? frameData.slice(dataUrlMatch[0].length)
+    : frameData;
+
+  const prompt = `You are a helpful AI assistant analyzing an image. The user has asked:
+
+"${userPrompt}"
+
+Please provide a clear, accurate, and helpful response based on what you observe in the image.`;
+
+  const payload = {
+    image_b64: base64Data,
+    prompt,
+    max_new_tokens: 1024,
+  };
+
+  const targetUrl = `${COSMOS_ENDPOINT}/infer`;
+  console.log(`[ADHOC] --> ${targetUrl}`);
+
+  try {
+    const response = await fetch(targetUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Cosmos API error: ${response.status} - ${errorText}`);
+    }
+
+    const apiResult = await response.json();
+    const content = apiResult.raw_text || apiResult.result || "";
+    console.log(`[ADHOC] <-- Response: ${content.length} chars`);
+    return content;
+  } catch (error) {
+    console.error("Error in ad-hoc Cosmos analysis:", error);
+    throw error;
+  }
+}
+
 async function getBatchSceneObservations(
   frames: string[], 
   intervalSeconds: number, 
@@ -616,6 +663,22 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error clearing alerts:", error);
       res.status(500).json({ error: "Failed to clear alerts" });
+    }
+  });
+
+  app.post("/api/analyze-adhoc", async (req, res) => {
+    try {
+      const { frameData, prompt } = req.body;
+
+      if (!frameData || !prompt) {
+        return res.status(400).json({ error: "frameData and prompt are required" });
+      }
+
+      const result = await analyzeWithCosmosAdhoc(frameData, prompt.trim());
+      res.json({ analysis: result });
+    } catch (error) {
+      console.error("Error in ad-hoc analysis:", error);
+      res.status(500).json({ error: "Failed to analyze frame" });
     }
   });
 

@@ -8,6 +8,7 @@ import { AlertList } from "@/components/alert-list";
 import { AlertDetailModal } from "@/components/alert-detail-modal";
 import { AnalysisStatus } from "@/components/analysis-status";
 import { SceneAgentModal } from "@/components/scene-agent-modal";
+import { QuickAnalysisModal } from "@/components/quick-analysis-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -99,6 +100,9 @@ export default function Dashboard() {
   
   const [isSceneAgentRunning, setIsSceneAgentRunning] = useState(false);
   const [sceneAgentProgress, setSceneAgentProgress] = useState("");
+  
+  const [isQuickAnalysisOpen, setIsQuickAnalysisOpen] = useState(false);
+  const [quickAnalysisFrame, setQuickAnalysisFrame] = useState<string | null>(null);
   const [sceneAgentPhase, setSceneAgentPhase] = useState<"recording" | "analyzing" | null>(null);
   const [sceneAgentElapsed, setSceneAgentElapsed] = useState(0);
   const [sceneAgentResult, setSceneAgentResult] = useState<SceneAgentResult | null>(null);
@@ -921,6 +925,10 @@ export default function Dashboard() {
                 isDrawingMode={isDrawingMode}
                 isAnalyzing={isAnalyzing}
                 isSceneAgentRunning={isSceneAgentRunning}
+                onFrameCapture={(frameData) => {
+                  setQuickAnalysisFrame(frameData);
+                  setIsQuickAnalysisOpen(true);
+                }}
               />
               {isSceneAgentRunning && (
                 <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center rounded-lg" data-testid="scene-agent-overlay">
@@ -1150,6 +1158,15 @@ export default function Dashboard() {
         result={sceneAgentResult}
         onRefresh={startSceneAgent}
         isRefreshing={isSceneAgentRunning}
+      />
+
+      <QuickAnalysisModal
+        isOpen={isQuickAnalysisOpen}
+        onClose={() => {
+          setIsQuickAnalysisOpen(false);
+          setQuickAnalysisFrame(null);
+        }}
+        frameData={quickAnalysisFrame}
       />
 
       <Dialog open={isUploadDialogOpen} onOpenChange={(open) => !open && handleUploadCancel()}>

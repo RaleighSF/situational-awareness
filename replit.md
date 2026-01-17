@@ -6,7 +6,12 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.3 (Current)
+### v1.4 (Current)
+- Quick Frame Analysis: Camera icon opens modal to ask ad-hoc questions about captured frames
+- Uses /api/analyze-adhoc endpoint for free-form prompts without saving rules
+- Enhanced Scene Agent reliability with 2048 token limit and fallback parsing for truncated responses
+
+### v1.3
 - Source-specific alerts: Alerts panel now filters by current video source instead of showing all alerts
 - Upload name dialog: Users can enter friendly names for uploaded videos instead of displaying raw filenames
 - Improved upload UX with cancel functionality and loading states
@@ -90,6 +95,7 @@ This application demonstrates how AI-powered vision analysis can automate securi
 - `PATCH /api/alerts/:id` - Update an alert (mark as read)
 - `DELETE /api/alerts` - Clear all alerts
 - `POST /api/analyze` - Analyze a video frame with a specific prompt
+- `POST /api/analyze-adhoc` - Ad-hoc frame analysis with free-form prompt (no saved rule)
 - `POST /api/scene-agent/run` - Run Scene Agent temporal analysis on captured frames
 - `GET /api/cosmos/health` - Check Cosmos endpoint health status
 - `GET /api/video/proxy` - Proxy video streams with CORS headers
