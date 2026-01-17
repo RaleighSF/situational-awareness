@@ -24,7 +24,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
   Video,
-  Shield,
   Crosshair,
   Eye,
   CheckCircle2,
@@ -33,6 +32,7 @@ import {
   ChevronDown,
   Clock,
 } from "lucide-react";
+import { SiNvidia } from "react-icons/si";
 import {
   Select,
   SelectContent,
@@ -601,7 +601,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-md bg-primary flex items-center justify-center">
-              <Shield className="h-5 w-5 text-primary-foreground" />
+              <SiNvidia className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
               <h1 className="text-lg font-semibold">Situational Awareness</h1>
