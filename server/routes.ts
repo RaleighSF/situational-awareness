@@ -175,22 +175,18 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
   "confidence": 0.85
 }
 
-CRITICAL - Use DELTA LANGUAGE:
-- changes: Describe TRANSITIONS not static states. Say "moved from X to Y", "entered/exited", "increased/decreased", "started/stopped". 
-  BAD: "Person crouches near box" (static description)
-  GOOD: "Worker transitioned from standing to crouching near equipment"
-- persistent: Describe what REMAINED CONSTANT, not what exists. Say "remained", "stayed", "continued", "unchanged".
-  BAD: "Blue platform with yellow stripes" (just describing)
-  GOOD: "Blue platform remained central throughout sequence"
+MANDATORY REQUIREMENTS:
+- changes: MUST have 3-5 items. Describe TRANSITIONS using "moved from X to Y", "entered/exited", "started/stopped", "changed from X to Y". Even subtle movements count.
+- persistent: MUST have 3-5 items. Use words like "remained", "stayed", "continued", "unchanged throughout".
+- events: MUST have 3-6 items with timestamps from the observations.
 
-RULES:
-- summary: 2-3 sentences, executive-friendly
-- changes: 3-5 bullets using transition/delta language
-- persistent: 3-5 bullets emphasizing continuity
-- events: 3-6 key timeline moments, max 12 words each
-- anomalies: unexpected observations only
-- escalations: only if action recommended
-- confidence: 0-1`;
+DELTA LANGUAGE EXAMPLES:
+  BAD: "Person crouches near box" (static - describes a state)
+  GOOD: "Worker shifted from standing to crouching position"
+  BAD: "Blue platform with yellow stripes" (static - just describing)
+  GOOD: "Blue platform remained central throughout the sequence"
+
+NEVER return empty arrays for changes, persistent, or events. There is ALWAYS something that changed and something that stayed the same.`;
 
   const payload = {
     prompt,
