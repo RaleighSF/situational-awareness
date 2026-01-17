@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema } from "@shared/schema";
+import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema, sceneAgentSynthesisSchema } from "@shared/schema";
 import type { BoundingBox, FrameObservation, SceneAgentSynthesis, SceneAgentResult } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
@@ -112,9 +112,9 @@ Be concise but thorough. If you detect the specified condition, explain exactly 
   }
 }
 
-async function getSceneObservation(frameData: string): Promise<string> {
+async function getSceneObservation(frameData: string, timestampOffset: number): Promise<{ text: string; confidence?: string }> {
   if (!frameData || frameData.length < 100) {
-    return "Invalid frame - could not analyze";
+    return { text: "Invalid frame - could not analyze" };
   }
 
   const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
@@ -122,7 +122,7 @@ async function getSceneObservation(frameData: string): Promise<string> {
     ? frameData.slice(dataUrlMatch[0].length)
     : frameData;
 
-  const prompt = `You are observing a security camera feed. Describe exactly what you see in this frame in a factual, structured way. Focus on:
+  const prompt = `You are observing a security camera feed at T+${timestampOffset}s. Describe exactly what you see in this frame in a factual, structured way. Focus on:
 - People present (count, positions, activities)
 - Vehicles or equipment visible
 - Environmental conditions (lighting, weather if visible)
@@ -149,83 +149,78 @@ Be concise and factual. List your observations as bullet points.`;
     }
 
     const result = await response.json();
-    return result.text || "No observation generated";
+    return { text: result.text || "No observation generated" };
   } catch (error) {
     console.error("Error getting scene observation:", error);
-    return `Observation failed: ${error instanceof Error ? error.message : "Unknown error"}`;
+    return { text: `Observation failed: ${error instanceof Error ? error.message : "Unknown error"}` };
   }
 }
 
-async function synthesizeObservations(observations: FrameObservation[], lastFrame: string): Promise<SceneAgentSynthesis> {
-  const timeline = observations
-    .map(o => `[T+${o.timestampOffset}s] ${o.observation}`)
-    .join("\n\n");
+async function synthesizeObservations(observations: FrameObservation[]): Promise<{ synthesis: SceneAgentSynthesis | null; rawText: string }> {
+  const observationsPayload = observations.map(o => ({
+    t: o.t,
+    text: o.text,
+    confidence: o.confidence,
+  }));
 
-  const prompt = `You are analyzing a sequence of observations from a security camera taken over time. Here is the timeline of observations:
-
-${timeline}
-
-Based on this sequence, provide a temporal analysis in EXACTLY this JSON format:
-{
-  "changes": ["list of things that changed between frames"],
-  "persistent": ["list of things that stayed constant throughout"],
-  "anomalies": ["list of any unusual or noteworthy events"],
-  "narrative": "A brief 2-3 sentence summary of what happened during this time period"
-}
-
-Focus on temporal patterns - what evolved, what remained stable, and any notable events. Return ONLY the JSON object, no other text.`;
-
-  // Extract base64 data from the last frame (remove data URL prefix if present)
-  const imageBase64 = lastFrame.includes(",") ? lastFrame.split(",")[1] : lastFrame;
+  const prompt = `Across the full window, identify (1) what changed, (2) what remained consistent, and (3) any notable events/anomalies. Populate events[] with time-indexed changes; include persistent/stable conditions in the summary. Output JSON only in the required schema: { summary, events: [{t, description, type?}], anomalies: [], escalations: [], confidence: "HIGH|MEDIUM|LOW" }`;
 
   const payload = {
-    image_b64: imageBase64,
-    prompt: prompt,
+    prompt,
+    observations: observationsPayload,
     max_new_tokens: 512,
   };
 
   try {
-    const response = await fetch(`${COSMOS_ENDPOINT}/infer`, {
+    const response = await fetch(`${COSMOS_ENDPOINT}/reason`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
-      throw new Error(`Cosmos API error: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Cosmos /reason API error: ${response.status} - ${errorText}`);
     }
 
-    const result = await response.json();
-    const text = result.text || "";
+    const apiResult = await response.json();
+    const rawText = apiResult.raw_text || "";
     
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          changes: Array.isArray(parsed.changes) ? parsed.changes : [],
-          persistent: Array.isArray(parsed.persistent) ? parsed.persistent : [],
-          anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
-          narrative: typeof parsed.narrative === "string" ? parsed.narrative : "Analysis complete.",
-        };
-      } catch {
-        console.error("Failed to parse synthesis JSON:", text);
+    if (apiResult.result) {
+      const parseResult = sceneAgentSynthesisSchema.safeParse(apiResult.result);
+      if (parseResult.success) {
+        return { synthesis: parseResult.data, rawText };
+      }
+      console.error("Failed to validate synthesis result:", parseResult.error);
+    }
+
+    if (rawText) {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            synthesis: {
+              summary: parsed.summary || "Analysis complete.",
+              events: Array.isArray(parsed.events) ? parsed.events : [],
+              anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
+              escalations: Array.isArray(parsed.escalations) ? parsed.escalations : [],
+              confidence: parsed.confidence || "MEDIUM",
+            },
+            rawText,
+          };
+        } catch {
+          console.error("Failed to parse synthesis JSON from raw_text:", rawText);
+        }
       }
     }
 
-    return {
-      changes: [],
-      persistent: [],
-      anomalies: [],
-      narrative: text || "Unable to generate synthesis from observations.",
-    };
+    return { synthesis: null, rawText };
   } catch (error) {
     console.error("Error synthesizing observations:", error);
-    return {
-      changes: [],
-      persistent: [],
-      anomalies: [],
-      narrative: `Synthesis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    return { 
+      synthesis: null, 
+      rawText: `Synthesis failed: ${error instanceof Error ? error.message : "Unknown error"}` 
     };
   }
 }
@@ -442,23 +437,23 @@ export async function registerRoutes(
         const timestampOffset = i * intervalSeconds;
         console.log(`[Scene Agent] Analyzing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
         
-        const observation = await getSceneObservation(frames[i]);
+        const observationResult = await getSceneObservation(frames[i], timestampOffset);
         observations.push({
-          index: i,
-          timestampOffset,
-          observation,
+          t: timestampOffset,
+          text: observationResult.text,
+          confidence: observationResult.confidence,
         });
       }
 
-      console.log(`[Scene Agent] Synthesizing ${observations.length} observations`);
-      const lastFrame = frames[frames.length - 1];
-      const synthesis = await synthesizeObservations(observations, lastFrame);
+      console.log(`[Scene Agent] Synthesizing ${observations.length} observations via /reason`);
+      const { synthesis, rawText } = await synthesizeObservations(observations);
 
       const endTime = new Date().toISOString();
 
       const result: SceneAgentResult = {
         observations,
         synthesis,
+        rawText,
         startTime,
         endTime,
         frameCount: frames.length,

@@ -87,21 +87,29 @@ export const sceneAgentRequestSchema = z.object({
 });
 
 export const frameObservationSchema = z.object({
-  index: z.number(),
-  timestampOffset: z.number(),
-  observation: z.string(),
+  t: z.number(),
+  text: z.string(),
+  confidence: z.string().optional(),
+});
+
+export const sceneAgentEventSchema = z.object({
+  t: z.number(),
+  description: z.string(),
+  type: z.string().optional(),
 });
 
 export const sceneAgentSynthesisSchema = z.object({
-  changes: z.array(z.string()),
-  persistent: z.array(z.string()),
+  summary: z.string(),
+  events: z.array(sceneAgentEventSchema),
   anomalies: z.array(z.string()),
-  narrative: z.string(),
+  escalations: z.array(z.string()),
+  confidence: z.string(),
 });
 
 export const sceneAgentResultSchema = z.object({
   observations: z.array(frameObservationSchema),
-  synthesis: sceneAgentSynthesisSchema,
+  synthesis: sceneAgentSynthesisSchema.nullable(),
+  rawText: z.string().optional(),
   startTime: z.string(),
   endTime: z.string(),
   frameCount: z.number(),
@@ -109,5 +117,6 @@ export const sceneAgentResultSchema = z.object({
 
 export type SceneAgentConfig = z.infer<typeof sceneAgentConfigSchema>;
 export type FrameObservation = z.infer<typeof frameObservationSchema>;
+export type SceneAgentEvent = z.infer<typeof sceneAgentEventSchema>;
 export type SceneAgentSynthesis = z.infer<typeof sceneAgentSynthesisSchema>;
 export type SceneAgentResult = z.infer<typeof sceneAgentResultSchema>;
