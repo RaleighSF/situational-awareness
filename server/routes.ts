@@ -274,7 +274,7 @@ Hard limits (must follow):
   const payload = {
     prompt,
     observations: observationsPayload,
-    max_new_tokens: 1024,
+    max_new_tokens: 2048,
   };
 
   const requestBody = JSON.stringify(payload);
@@ -341,7 +341,32 @@ Hard limits (must follow):
             rawText,
           };
         } catch {
-          console.error("Failed to parse synthesis JSON from raw_text:", rawText);
+          console.error("Failed to parse synthesis JSON from raw_text, attempting fallback extraction");
+          
+          // Fallback: try to extract summary from truncated JSON
+          const summaryMatch = rawText.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+          if (summaryMatch) {
+            const extractedSummary = summaryMatch[1]
+              .replace(/\\n/g, ' ')
+              .replace(/\\"/g, '"')
+              .replace(/\s+/g, ' ')
+              .trim();
+            
+            // Truncate very long summaries to first few sentences
+            const sentences = extractedSummary.match(/[^.!?]+[.!?]+/g) || [extractedSummary];
+            const truncatedSummary = sentences.slice(0, 4).join(' ').trim();
+            
+            return {
+              synthesis: {
+                summary: truncatedSummary || "Analysis complete but response was truncated.",
+                events: [],
+                anomalies: [],
+                escalations: [],
+                confidence: 0.5,
+              },
+              rawText,
+            };
+          }
         }
       }
     }
