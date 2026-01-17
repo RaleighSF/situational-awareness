@@ -156,7 +156,7 @@ Be concise and factual. List your observations as bullet points.`;
   }
 }
 
-async function synthesizeObservations(observations: FrameObservation[]): Promise<SceneAgentSynthesis> {
+async function synthesizeObservations(observations: FrameObservation[], lastFrame: string): Promise<SceneAgentSynthesis> {
   const timeline = observations
     .map(o => `[T+${o.timestampOffset}s] ${o.observation}`)
     .join("\n\n");
@@ -175,8 +175,11 @@ Based on this sequence, provide a temporal analysis in EXACTLY this JSON format:
 
 Focus on temporal patterns - what evolved, what remained stable, and any notable events. Return ONLY the JSON object, no other text.`;
 
+  // Extract base64 data from the last frame (remove data URL prefix if present)
+  const imageBase64 = lastFrame.includes(",") ? lastFrame.split(",")[1] : lastFrame;
+
   const payload = {
-    image_b64: "",
+    image_b64: imageBase64,
     prompt: prompt,
     max_new_tokens: 512,
   };
@@ -448,7 +451,8 @@ export async function registerRoutes(
       }
 
       console.log(`[Scene Agent] Synthesizing ${observations.length} observations`);
-      const synthesis = await synthesizeObservations(observations);
+      const lastFrame = frames[frames.length - 1];
+      const synthesis = await synthesizeObservations(observations, lastFrame);
 
       const endTime = new Date().toISOString();
 
