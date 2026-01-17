@@ -237,6 +237,12 @@ export class ObjectStorageService {
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });
   }
+
+  // Deletes an object entity from storage.
+  async deleteObjectEntity(objectPath: string): Promise<void> {
+    const objectFile = await this.getObjectEntityFile(objectPath);
+    await objectFile.delete();
+  }
 }
 
 function parseObjectPath(path: string): {

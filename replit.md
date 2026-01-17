@@ -6,7 +6,13 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.4 (Current)
+### v1.5 (Current)
+- Cloud Object Storage: Uploaded videos now persist in Replit Object Storage (survives deploys)
+- Presigned URL upload flow: request-upload-url → direct cloud upload → complete-upload
+- Videos served via /objects/* endpoint from cloud storage
+- Backward compatibility with existing /uploads/ local files
+
+### v1.4
 - Quick Frame Analysis: Camera icon opens modal to ask ad-hoc questions about captured frames
 - Uses /api/analyze-adhoc endpoint for free-form prompts without saving rules
 - Enhanced Scene Agent reliability with 2048 token limit and fallback parsing for truncated responses
@@ -84,8 +90,11 @@ This application demonstrates how AI-powered vision analysis can automate securi
 ## API Endpoints
 
 - `GET /api/video-sources` - List all video sources with settings
-- `POST /api/video-sources/upload` - Upload a video file to create a new source (multipart/form-data)
-- `DELETE /api/video-sources/:id` - Delete a video source and its associated prompts/alerts (uploaded sources only)
+- `POST /api/video-sources/upload` - Upload a video file to create a new source (multipart/form-data, legacy local storage)
+- `POST /api/video-sources/request-upload-url` - Get presigned URL for cloud video upload
+- `POST /api/video-sources/complete-upload` - Complete cloud upload and create video source
+- `GET /objects/*` - Serve videos from cloud object storage
+- `DELETE /api/video-sources/:id` - Delete a video source and its associated prompts/alerts (handles both local and cloud files)
 - `PATCH /api/video-sources/:id/settings` - Update source settings (boundingBox, sceneContext)
 - `GET /api/prompts?videoSourceId=xxx` - List detection rules for a specific source
 - `POST /api/prompts` - Create a new detection rule (requires videoSourceId)
@@ -105,6 +114,9 @@ This application demonstrates how AI-powered vision analysis can automate securi
 
 - `DATABASE_URL` - PostgreSQL connection string
 - `COSMOS_ENDPOINT` - Custom Cosmos Reason 2 endpoint URL (default: https://cosmos.agentdemos.com)
+- `DEFAULT_OBJECT_STORAGE_BUCKET_ID` - Replit Object Storage bucket ID for video persistence
+- `PRIVATE_OBJECT_DIR` - Directory path for private objects (uploaded videos)
+- `PUBLIC_OBJECT_SEARCH_PATHS` - Search paths for public assets
 
 Note: The COSMOS_ENDPOINT points to a self-hosted Cosmos Reason 2 inference server. No API key is required as authentication is handled at the infrastructure level (Cloudflare/EC2).
 
