@@ -46,7 +46,7 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData }: QuickAnalysis
       }
       
       const result = await res.json();
-      setResponse(result.analysis);
+      setResponse(result.analysis || "No response received from the model. Please try again.");
     } catch (error) {
       setResponse(`Error: ${error instanceof Error ? error.message : "Analysis failed"}`);
     } finally {
@@ -70,7 +70,7 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData }: QuickAnalysis
 
         <div className="flex-1 flex flex-col gap-4 min-h-0">
           {frameData && (
-            <div className="rounded-lg overflow-hidden border bg-black/50">
+            <div className="rounded-lg overflow-hidden border-2 border-[#76b900] bg-black/50">
               <img
                 src={frameData}
                 alt="Captured frame"
@@ -80,7 +80,7 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData }: QuickAnalysis
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2">
             <Textarea
               placeholder="Ask anything about this frame... (e.g., 'Count the boxes in this image')"
               value={prompt}
@@ -91,9 +91,10 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData }: QuickAnalysis
               data-testid="input-adhoc-prompt"
             />
             <Button
+              size="icon"
               onClick={handleAnalyze}
               disabled={!prompt.trim() || isAnalyzing}
-              className="self-end bg-[#76b900] hover:bg-[#76b900]/90"
+              className="h-10 w-10 shrink-0 bg-[#76b900] hover:bg-[#76b900]/90"
               data-testid="button-analyze"
             >
               {isAnalyzing ? (
