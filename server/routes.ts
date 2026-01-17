@@ -704,6 +704,12 @@ export async function registerRoutes(
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
+      } else if (source.url.startsWith("/objects/")) {
+        try {
+          await objectStorageService.deleteObjectEntity(source.url);
+        } catch (error) {
+          console.warn("Failed to delete object from storage:", error);
+        }
       }
       await storage.deleteVideoSource(req.params.id);
       res.status(204).send();

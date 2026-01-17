@@ -173,18 +173,34 @@ export default function Dashboard() {
 
   const uploadVideoMutation = useMutation({
     mutationFn: async ({ file, name }: { file: File; name: string }) => {
-      const formData = new FormData();
-      formData.append("video", file);
-      formData.append("name", name);
-      const res = await fetch("/api/video-sources/upload", {
+      const urlRes = await fetch("/api/video-sources/request-upload-url", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, contentType: file.type }),
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Upload failed");
+      if (!urlRes.ok) {
+        const error = await urlRes.json();
+        throw new Error(error.error || "Failed to get upload URL");
       }
-      return res.json();
+      const { uploadURL, objectPath } = await urlRes.json();
+      const uploadRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      if (!uploadRes.ok) {
+        throw new Error("Failed to upload video to storage");
+      }
+      const completeRes = await fetch("/api/video-sources/complete-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, objectPath }),
+      });
+      if (!completeRes.ok) {
+        const error = await completeRes.json();
+        throw new Error(error.error || "Failed to complete upload");
+      }
+      return completeRes.json();
     },
     onSuccess: (newSource: VideoSource) => {
       queryClient.invalidateQueries({ queryKey: ["/api/video-sources"] });
