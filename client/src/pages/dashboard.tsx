@@ -57,6 +57,8 @@ export default function Dashboard() {
   const [lastAnalysisTime, setLastAnalysisTime] = useState<Date | null>(null);
   const [nextAnalysisIn, setNextAnalysisIn] = useState<number | null>(null);
   const promptSchedulesRef = useRef<Map<string, PromptSchedule>>(new Map());
+  const cachedFrameRef = useRef<{ data: string; timestamp: number } | null>(null);
+  const FRAME_CACHE_TTL_MS = 500;
   
   const [isTestResultOpen, setIsTestResultOpen] = useState(false);
   const [testingPrompt, setTestingPrompt] = useState<Prompt | null>(null);
@@ -183,9 +185,24 @@ export default function Dashboard() {
   }, []);
 
   const getFrameWithFallback = useCallback(async (boundingBox: BoundingBox | null): Promise<string | null> => {
+    const now = Date.now();
+    
+    if (!boundingBox && cachedFrameRef.current) {
+      const age = now - cachedFrameRef.current.timestamp;
+      if (age < FRAME_CACHE_TTL_MS) {
+        console.log(`[Dashboard] Reusing cached frame (${age}ms old)`);
+        return cachedFrameRef.current.data;
+      }
+    }
+    
     if (videoPlayerRef.current) {
       const frame = videoPlayerRef.current.captureFrame(boundingBox);
-      if (frame) return frame;
+      if (frame) {
+        if (!boundingBox) {
+          cachedFrameRef.current = { data: frame, timestamp: now };
+        }
+        return frame;
+      }
     }
     try {
       const response = await fetch("/api/test/frame");
