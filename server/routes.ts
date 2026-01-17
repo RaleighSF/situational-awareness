@@ -147,35 +147,41 @@ Be detailed and factual. Use bullet points.`;
 
   const requestBody = JSON.stringify(payload);
   const requestSizeKB = (requestBody.length / 1024).toFixed(1);
+  const targetUrl = `${COSMOS_ENDPOINT}/infer`;
   
-  console.log(`[INFER T+${timestampOffset}s] Request: ${requestSizeKB}KB payload, max_tokens=${payload.max_new_tokens}`);
-  const startTime = Date.now();
+  console.log(`[INFER T+${timestampOffset}s] --> ${targetUrl} (${requestSizeKB}KB)`);
+  const t0 = Date.now();
 
   try {
-    const response = await fetch(`${COSMOS_ENDPOINT}/infer`, {
+    const response = await fetch(targetUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: requestBody,
     });
 
-    const latencyMs = Date.now() - startTime;
+    const t1 = Date.now();
+    const fetchMs = t1 - t0;
+    console.log(`[INFER T+${timestampOffset}s] <-- status=${response.status} in ${fetchMs}ms (TTFB)`);
 
     if (!response.ok) {
-      console.log(`[INFER T+${timestampOffset}s] FAILED: ${response.status} after ${latencyMs}ms`);
       throw new Error(`Cosmos API error: ${response.status}`);
     }
 
     const result = await response.json();
+    const t2 = Date.now();
+    const parseMs = t2 - t1;
+    const totalMs = t2 - t0;
+    
     const responseText = result.text || "No observation generated";
     const responseWords = responseText.split(/\s+/).length;
     const responseChars = responseText.length;
     
-    console.log(`[INFER T+${timestampOffset}s] Response: ${latencyMs}ms, ${responseWords} words, ${responseChars} chars`);
+    console.log(`[INFER T+${timestampOffset}s] body parsed: +${parseMs}ms | TOTAL: ${totalMs}ms | ${responseWords} words, ${responseChars} chars`);
     
     return { text: responseText };
   } catch (error) {
-    const latencyMs = Date.now() - startTime;
-    console.error(`[INFER T+${timestampOffset}s] Error after ${latencyMs}ms:`, error);
+    const totalMs = Date.now() - t0;
+    console.error(`[INFER T+${timestampOffset}s] ERROR after ${totalMs}ms:`, error);
     return { text: `Observation failed: ${error instanceof Error ? error.message : "Unknown error"}` };
   }
 }
@@ -227,32 +233,37 @@ Hard limits (must follow):
   const requestBody = JSON.stringify(payload);
   const requestSizeKB = (requestBody.length / 1024).toFixed(1);
   const totalObsChars = observationsPayload.reduce((sum, o) => sum + o.text.length, 0);
-  const promptChars = prompt.length;
+  const targetUrl = `${COSMOS_ENDPOINT}/reason`;
   
-  console.log(`[REASON] Request: ${requestSizeKB}KB payload, ${observationsPayload.length} observations (${totalObsChars} chars), prompt=${promptChars} chars, max_tokens=${payload.max_new_tokens}`);
-  const startTime = Date.now();
+  console.log(`[REASON] --> ${targetUrl} (${requestSizeKB}KB, ${observationsPayload.length} obs, ${totalObsChars} chars)`);
+  const t0 = Date.now();
 
   try {
-    const response = await fetch(`${COSMOS_ENDPOINT}/reason`, {
+    const response = await fetch(targetUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: requestBody,
     });
 
-    const latencyMs = Date.now() - startTime;
+    const t1 = Date.now();
+    const fetchMs = t1 - t0;
+    console.log(`[REASON] <-- status=${response.status} in ${fetchMs}ms (TTFB)`);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.log(`[REASON] FAILED: ${response.status} after ${latencyMs}ms`);
       throw new Error(`Cosmos /reason API error: ${response.status} - ${errorText}`);
     }
 
     const apiResult = await response.json();
+    const t2 = Date.now();
+    const parseMs = t2 - t1;
+    const totalMs = t2 - t0;
+    
     const rawText = apiResult.raw_text || "";
     const responseChars = rawText.length;
     const responseWords = rawText.split(/\s+/).length;
     
-    console.log(`[REASON] Response: ${latencyMs}ms, ${responseWords} words, ${responseChars} chars`);
+    console.log(`[REASON] body parsed: +${parseMs}ms | TOTAL: ${totalMs}ms | ${responseWords} words, ${responseChars} chars`);
     
     if (apiResult.result) {
       const parseResult = sceneAgentSynthesisSchema.safeParse(apiResult.result);
