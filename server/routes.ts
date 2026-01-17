@@ -163,16 +163,26 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
     confidence: o.confidence,
   }));
 
-  const prompt = `Analyze this security footage sequence. Provide a JSON response with:
-- summary: A concise 2-3 sentence overview of the scene and key takeaway
-- changes: List of things that changed during the observation window (3-5 items)
-- persistent: List of things that remained constant throughout (3-5 items)
-- events: Array of 3-6 key timeline moments [{t: seconds, description: "what happened"}]
-- anomalies: List of unusual or noteworthy observations (empty if none)
-- escalations: List of items requiring immediate attention (empty if none)
-- confidence: A number from 0 to 1 reflecting certainty
+  const prompt = `Analyze this security footage sequence. Return JSON only with ALL these fields:
 
-Output ONLY valid JSON matching this schema.`;
+{
+  "summary": "2-3 sentence executive overview of what's happening and key takeaway",
+  "changes": ["thing that changed during window", "another change observed"],
+  "persistent": ["element that stayed constant", "another persistent element"],
+  "events": [{"t": 0, "description": "key moment in 12 words or less"}],
+  "anomalies": ["unusual observation if any"],
+  "escalations": ["urgent item if action needed"],
+  "confidence": 0.85
+}
+
+RULES:
+- summary: 2-3 sentences, executive-friendly, overall picture
+- changes: 3-5 bullets of what CHANGED (entries/exits, new objects, motion)
+- persistent: 3-5 bullets of what STAYED THE SAME throughout
+- events: 3-6 key timeline moments only, max 12 words each
+- anomalies: unexpected observations only
+- escalations: only if action recommended
+- confidence: 0-1`;
 
   const payload = {
     prompt,
