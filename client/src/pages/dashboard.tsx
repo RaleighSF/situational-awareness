@@ -314,7 +314,7 @@ export default function Dashboard() {
   });
 
   const analyzeFrameMutation = useMutation({
-    mutationFn: async (data: { frameData: string; promptId: string }) => {
+    mutationFn: async (data: { frameData: string; promptId: string; sceneContext?: string }) => {
       const res = await apiRequest("POST", "/api/analyze", data);
       if (!res.ok) {
         const errorData = await res.json();
@@ -395,6 +395,7 @@ export default function Dashboard() {
         analyzeFrameMutation.mutate({
           frameData,
           promptId: prompt.id,
+          sceneContext: sceneAgentContext || undefined,
         });
       }
     };
@@ -422,6 +423,7 @@ export default function Dashboard() {
         analyzeFrameMutation.mutate({
           frameData: frame,
           promptId: currentPrompt.id,
+          sceneContext: sceneAgentContext || undefined,
         });
       }
       const sched = schedules.get(prompt.id);
@@ -587,6 +589,7 @@ export default function Dashboard() {
       const response = await apiRequest("POST", "/api/analyze", {
         frameData,
         promptId: prompt.id,
+        sceneContext: sceneAgentContext || undefined,
       });
       
       const result = await response.json();

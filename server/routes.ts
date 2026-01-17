@@ -147,7 +147,8 @@ function boundingBoxToROI(boundingBox: BoundingBox | null): CosmosROI | undefine
 async function analyzeWithCosmos(
   frameData: string,
   prompt: string,
-  boundingBox: BoundingBox | null = null
+  boundingBox: BoundingBox | null = null,
+  sceneContext?: string
 ): Promise<{ detected: boolean; analysis: string; confidence: string }> {
   if (!frameData || frameData.length < 100) {
     console.log("[Cosmos] Invalid frame data - too short or empty");
@@ -167,7 +168,11 @@ async function analyzeWithCosmos(
     console.log(`[Cosmos] Frame data doesn't have expected prefix. First 100 chars: ${frameData.substring(0, 100)}`);
   }
 
-  const fullPrompt = `You are a situational awareness AI analyzing security camera footage. Analyze this image and determine if the following condition is present:
+  const contextPreamble = sceneContext 
+    ? `Scene Context: ${sceneContext}\n\n` 
+    : "";
+
+  const fullPrompt = `${contextPreamble}You are a situational awareness AI analyzing security camera footage. Analyze this image and determine if the following condition is present:
 
 "${prompt}"
 
@@ -789,7 +794,7 @@ export async function registerRoutes(
 
   app.post("/api/analyze", async (req, res) => {
     try {
-      const { frameData, promptId } = req.body;
+      const { frameData, promptId, sceneContext } = req.body;
 
       if (!frameData || !promptId) {
         return res.status(400).json({ error: "frameData and promptId are required" });
@@ -800,7 +805,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Prompt not found" });
       }
 
-      const result = await analyzeWithCosmos(frameData, prompt.prompt, null);
+      const result = await analyzeWithCosmos(frameData, prompt.prompt, prompt.boundingBox, sceneContext);
 
       let alertCreated = false;
       if (result.detected) {
