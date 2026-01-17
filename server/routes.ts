@@ -661,13 +661,17 @@ export async function registerRoutes(
       if (!name || !objectPath) {
         return res.status(400).json({ error: "Name and objectPath are required" });
       }
-      await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+      const { publicUrl } = await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
         owner: "system",
         visibility: "public",
       });
+      // Use the direct public GCS URL for production compatibility
+      // The publicUrl allows videos to work in deployed environments where
+      // the object storage sidecar is not available
+      const videoUrl = publicUrl || objectPath;
       const source = await storage.createVideoSource({
         name,
-        url: objectPath,
+        url: videoUrl,
         isActive: true,
         settings: null,
       });

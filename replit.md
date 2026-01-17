@@ -6,7 +6,12 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.5 (Current)
+### v1.6 (Current)
+- Production fix: Uploaded videos now use direct public GCS URLs instead of /objects/* paths
+- This ensures videos work in published deployments where the storage sidecar is unavailable
+- Backward compatible: existing /uploads/ and /attached_assets/ paths still work
+
+### v1.5
 - Cloud Object Storage: Uploaded videos now persist in Replit Object Storage (survives deploys)
 - Presigned URL upload flow: request-upload-url → direct cloud upload → complete-upload
 - Videos served via /objects/* endpoint from cloud storage

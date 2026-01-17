@@ -206,19 +206,26 @@ export class ObjectStorageService {
     return `/objects/${entityId}`;
   }
 
-  // Tries to set the ACL policy for the object entity and return the normalized path.
+  // Tries to set the ACL policy for the object entity and return the public URL if public.
   async trySetObjectEntityAclPolicy(
     rawPath: string,
     aclPolicy: ObjectAclPolicy
-  ): Promise<string> {
+  ): Promise<{ normalizedPath: string; publicUrl: string | null }> {
     const normalizedPath = this.normalizeObjectEntityPath(rawPath);
     if (!normalizedPath.startsWith("/")) {
-      return normalizedPath;
+      return { normalizedPath, publicUrl: null };
     }
 
     const objectFile = await this.getObjectEntityFile(normalizedPath);
     await setObjectAclPolicy(objectFile, aclPolicy);
-    return normalizedPath;
+    
+    // If visibility is public, return the direct GCS public URL
+    if (aclPolicy.visibility === "public") {
+      const publicUrl = `https://storage.googleapis.com/${objectFile.bucket.name}/${objectFile.name}`;
+      return { normalizedPath, publicUrl };
+    }
+    
+    return { normalizedPath, publicUrl: null };
   }
 
   // Checks if the user can access the object entity.
