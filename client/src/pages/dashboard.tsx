@@ -771,7 +771,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <p className="text-white text-lg font-medium mb-2">Recording Scene</p>
-                      <p className="text-white/80 text-2xl font-mono">{sceneAgentElapsed}s / 60s</p>
+                      <p className="text-white/80 text-2xl font-mono">{sceneAgentElapsed}s / 30s</p>
                       <p className="text-white/60 text-sm mt-2">Capturing temporal data...</p>
                     </>
                   ) : sceneAgentPhase === "analyzing" ? (
