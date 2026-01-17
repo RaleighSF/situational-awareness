@@ -7,7 +7,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Clock, AlertTriangle, AlertOctagon, ChevronDown, TrendingUp, Repeat } from "lucide-react";
+import { Clock, AlertTriangle, AlertOctagon, ChevronDown, TrendingUp, Repeat, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { SceneAgentResult } from "@shared/schema";
@@ -16,12 +17,16 @@ interface SceneAgentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   result: SceneAgentResult | null;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export function SceneAgentModal({
   open,
   onOpenChange,
   result,
+  onRefresh,
+  isRefreshing = false,
 }: SceneAgentModalProps) {
   if (!result) return null;
 
@@ -43,15 +48,32 @@ export function SceneAgentModal({
             <DialogTitle className="text-xl font-semibold">
               Temporal Analysis
             </DialogTitle>
-            {hasValidSynthesis && (
-              <Badge 
-                variant={synthesis.confidence >= 0.7 ? "default" : "secondary"}
-                className="text-xs"
-                data-testid="confidence-badge"
-              >
-                {Math.round(synthesis.confidence * 100)}% Confidence
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {hasValidSynthesis && (
+                <Badge 
+                  variant={synthesis.confidence >= 0.7 ? "default" : "secondary"}
+                  className="text-xs"
+                  data-testid="confidence-badge"
+                >
+                  {Math.round(synthesis.confidence * 100)}% Confidence
+                </Badge>
+              )}
+              {onRefresh && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onRefresh();
+                  }}
+                  disabled={isRefreshing}
+                  title="Run new analysis"
+                  data-testid="button-refresh-analysis"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                </Button>
+              )}
+            </div>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             {formatTimeRange()}

@@ -653,7 +653,13 @@ export default function Dashboard() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={startSceneAgent}
+                  onClick={() => {
+                    if (sceneAgentResult && !isSceneAgentRunning) {
+                      setIsSceneAgentModalOpen(true);
+                    } else {
+                      startSceneAgent();
+                    }
+                  }}
                   disabled={isSceneAgentRunning}
                   className="text-primary"
                   data-testid="button-scene-agent"
@@ -663,7 +669,7 @@ export default function Dashboard() {
                   ) : (
                     <Bot className="h-4 w-4 mr-2" />
                   )}
-                  {isSceneAgentRunning ? "Monitoring..." : "Scene Agent"}
+                  {isSceneAgentRunning ? "Monitoring..." : sceneAgentResult ? "View Report" : "Scene Agent"}
                 </Button>
               </div>
             </div>
@@ -922,6 +928,8 @@ export default function Dashboard() {
         open={isSceneAgentModalOpen}
         onOpenChange={setIsSceneAgentModalOpen}
         result={sceneAgentResult}
+        onRefresh={startSceneAgent}
+        isRefreshing={isSceneAgentRunning}
       />
     </div>
   );
