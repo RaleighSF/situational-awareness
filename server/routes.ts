@@ -433,22 +433,35 @@ export async function registerRoutes(
       
       const { frames, intervalSeconds, durationSeconds } = parseResult.data;
 
-      console.log(`[Scene Agent] Starting parallel analysis of ${frames.length} frames over ${durationSeconds}s`);
+      console.log(`[Scene Agent] Starting analysis of ${frames.length} frames over ${durationSeconds}s (batched concurrency)`);
       const startTime = new Date().toISOString();
 
-      const observationPromises = frames.map(async (frame, i) => {
-        const timestampOffset = i * intervalSeconds;
-        console.log(`[Scene Agent] Analyzing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
+      const observations: FrameObservation[] = [];
+      const BATCH_SIZE = 2;
+      
+      for (let batchStart = 0; batchStart < frames.length; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, frames.length);
+        const batchFrames = frames.slice(batchStart, batchEnd);
         
-        const observation = await getSceneObservation(frame);
-        return {
-          index: i,
-          timestampOffset,
-          observation,
-        };
-      });
-
-      const observations = await Promise.all(observationPromises);
+        console.log(`[Scene Agent] Processing batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: frames ${batchStart + 1}-${batchEnd}`);
+        
+        const batchPromises = batchFrames.map(async (frame, batchIndex) => {
+          const i = batchStart + batchIndex;
+          const timestampOffset = i * intervalSeconds;
+          console.log(`[Scene Agent] Analyzing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
+          
+          const observation = await getSceneObservation(frame);
+          return {
+            index: i,
+            timestampOffset,
+            observation,
+          };
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        observations.push(...batchResults);
+      }
+      
       observations.sort((a, b) => a.index - b.index);
 
       console.log(`[Scene Agent] All ${observations.length} observations complete, synthesizing`);
