@@ -167,19 +167,27 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
 
 {
   "summary": "2-3 sentence executive overview of what's happening and key takeaway",
-  "changes": ["thing that changed during window", "another change observed"],
-  "persistent": ["element that stayed constant", "another persistent element"],
+  "changes": ["A person entered the frame from the left side", "Worker count increased from 2 to 3", "Forklift moved from idle to active"],
+  "persistent": ["Loading dock platform remained central throughout", "Two workers stayed in the same positions", "Weather conditions unchanged"],
   "events": [{"t": 0, "description": "key moment in 12 words or less"}],
   "anomalies": ["unusual observation if any"],
   "escalations": ["urgent item if action needed"],
   "confidence": 0.85
 }
 
+CRITICAL - Use DELTA LANGUAGE:
+- changes: Describe TRANSITIONS not static states. Say "moved from X to Y", "entered/exited", "increased/decreased", "started/stopped". 
+  BAD: "Person crouches near box" (static description)
+  GOOD: "Worker transitioned from standing to crouching near equipment"
+- persistent: Describe what REMAINED CONSTANT, not what exists. Say "remained", "stayed", "continued", "unchanged".
+  BAD: "Blue platform with yellow stripes" (just describing)
+  GOOD: "Blue platform remained central throughout sequence"
+
 RULES:
-- summary: 2-3 sentences, executive-friendly, overall picture
-- changes: 3-5 bullets of what CHANGED (entries/exits, new objects, motion)
-- persistent: 3-5 bullets of what STAYED THE SAME throughout
-- events: 3-6 key timeline moments only, max 12 words each
+- summary: 2-3 sentences, executive-friendly
+- changes: 3-5 bullets using transition/delta language
+- persistent: 3-5 bullets emphasizing continuity
+- events: 3-6 key timeline moments, max 12 words each
 - anomalies: unexpected observations only
 - escalations: only if action recommended
 - confidence: 0-1`;
