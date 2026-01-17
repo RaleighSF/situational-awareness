@@ -7,7 +7,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Clock, AlertTriangle, AlertOctagon, ChevronDown } from "lucide-react";
+import { Clock, AlertTriangle, AlertOctagon, ChevronDown, TrendingUp, Repeat } from "lucide-react";
 import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { SceneAgentResult } from "@shared/schema";
@@ -66,6 +66,47 @@ export function SceneAgentModal({
                   {synthesis.summary}
                 </p>
               </div>
+            )}
+
+            {hasValidSynthesis && (synthesis.changes.length > 0 || synthesis.persistent.length > 0) && (
+              <>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {synthesis.changes.length > 0 && (
+                    <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 p-4">
+                      <div className="flex items-center gap-2 mb-3" data-testid="section-changes">
+                        <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <h3 className="font-medium text-blue-900 dark:text-blue-100">What Changed</h3>
+                      </div>
+                      <ul className="space-y-2">
+                        {synthesis.changes.map((item, i) => (
+                          <li key={i} className="text-sm text-blue-800 dark:text-blue-200 flex items-start gap-2" data-testid={`change-item-${i}`}>
+                            <span className="text-blue-500 mt-0.5">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {synthesis.persistent.length > 0 && (
+                    <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 p-4">
+                      <div className="flex items-center gap-2 mb-3" data-testid="section-persistent">
+                        <Repeat className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        <h3 className="font-medium text-green-900 dark:text-green-100">What Stayed the Same</h3>
+                      </div>
+                      <ul className="space-y-2">
+                        {synthesis.persistent.map((item, i) => (
+                          <li key={i} className="text-sm text-green-800 dark:text-green-200 flex items-start gap-2" data-testid={`persistent-item-${i}`}>
+                            <span className="text-green-500 mt-0.5">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
 
             {hasValidSynthesis && (synthesis.anomalies.length > 0 || synthesis.escalations.length > 0) && (

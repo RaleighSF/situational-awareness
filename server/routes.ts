@@ -163,14 +163,26 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
     confidence: o.confidence,
   }));
 
-  const prompt = `Return JSON only in the required schema. Keep it concise and executive-friendly.
-summary: 2-3 sentences max, focused on what is happening overall and the most important takeaway. No scene-detail lists.
-events: include only 3-6 key timeline moments (not every frame), each description max 12 words.
-anomalies: use as "Notable Changes" bullets (max 3-5 items, each max 12 words) - only include deltas (entries/exits, new objects, motion start/stop, confidence jumps).
-escalations: only if action is recommended; max 1-2 bullets.
-confidence: 0-1 reflecting overall certainty.
+  const prompt = `Analyze this security footage sequence. Return JSON only with ALL these fields:
 
-{"summary": "...", "events": [{"t": 0, "description": "..."}], "anomalies": [], "escalations": [], "confidence": 0.85}`;
+{
+  "summary": "2-3 sentence executive overview of what's happening and key takeaway",
+  "changes": ["thing that changed during window", "another change observed"],
+  "persistent": ["element that stayed constant", "another persistent element"],
+  "events": [{"t": 0, "description": "key moment in 12 words or less"}],
+  "anomalies": ["unusual observation if any"],
+  "escalations": ["urgent item if action needed"],
+  "confidence": 0.85
+}
+
+RULES:
+- summary: 2-3 sentences, executive-friendly, overall picture
+- changes: 3-5 bullets of what CHANGED (entries/exits, new objects, motion)
+- persistent: 3-5 bullets of what STAYED THE SAME throughout
+- events: 3-6 key timeline moments only, max 12 words each
+- anomalies: unexpected observations only
+- escalations: only if action recommended
+- confidence: 0-1`;
 
   const payload = {
     prompt,
@@ -209,6 +221,8 @@ confidence: 0-1 reflecting overall certainty.
           return {
             synthesis: {
               summary: parsed.summary || "Analysis complete.",
+              changes: Array.isArray(parsed.changes) ? parsed.changes : [],
+              persistent: Array.isArray(parsed.persistent) ? parsed.persistent : [],
               events: Array.isArray(parsed.events) ? parsed.events : [],
               anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
               escalations: Array.isArray(parsed.escalations) ? parsed.escalations : [],
