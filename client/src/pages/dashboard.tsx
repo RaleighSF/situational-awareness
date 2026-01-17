@@ -510,7 +510,7 @@ export default function Dashboard() {
     const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1;
 
     setIsSceneAgentRunning(true);
-    setSceneAgentProgress(`Watching for ${durationSeconds} seconds...`);
+    setSceneAgentProgress("");
     sceneAgentFramesRef.current = [];
 
     try {
@@ -529,7 +529,12 @@ export default function Dashboard() {
       for (let i = 0; i < frameCount; i++) {
         const secondsElapsed = i * intervalSeconds;
         const secondsRemaining = durationSeconds - secondsElapsed;
-        setSceneAgentProgress(secondsRemaining > 0 ? `${secondsRemaining} seconds remaining...` : `Finishing observation...`);
+        
+        if (secondsRemaining > 0) {
+          setSceneAgentProgress(`${secondsRemaining} seconds remaining...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          setSceneAgentProgress("");
+        }
         
         const frameData = videoPlayerRef.current?.captureFrame(currentBoundingBox);
         if (frameData) {
@@ -540,7 +545,7 @@ export default function Dashboard() {
         }
 
         if (i < frameCount - 1) {
-          await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+          await new Promise(resolve => setTimeout(resolve, (intervalSeconds - 1) * 1000));
         }
       }
 
@@ -555,7 +560,13 @@ export default function Dashboard() {
         return;
       }
 
-      setSceneAgentProgress(`Processing observations...`);
+      setSceneAgentProgress("Observations...");
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setSceneAgentProgress("Summarizing...");
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setSceneAgentProgress("Detecting Changes...");
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setSceneAgentProgress("Building Timeline...");
 
       const response = await apiRequest("POST", "/api/scene-agent/run", {
         frames: sceneAgentFramesRef.current,
