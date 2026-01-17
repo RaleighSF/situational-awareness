@@ -145,21 +145,37 @@ Be detailed and factual. Use bullet points.`;
     max_new_tokens: 192,
   };
 
+  const requestBody = JSON.stringify(payload);
+  const requestSizeKB = (requestBody.length / 1024).toFixed(1);
+  
+  console.log(`[INFER T+${timestampOffset}s] Request: ${requestSizeKB}KB payload, max_tokens=${payload.max_new_tokens}`);
+  const startTime = Date.now();
+
   try {
     const response = await fetch(`${COSMOS_ENDPOINT}/infer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: requestBody,
     });
 
+    const latencyMs = Date.now() - startTime;
+
     if (!response.ok) {
+      console.log(`[INFER T+${timestampOffset}s] FAILED: ${response.status} after ${latencyMs}ms`);
       throw new Error(`Cosmos API error: ${response.status}`);
     }
 
     const result = await response.json();
-    return { text: result.text || "No observation generated" };
+    const responseText = result.text || "No observation generated";
+    const responseWords = responseText.split(/\s+/).length;
+    const responseChars = responseText.length;
+    
+    console.log(`[INFER T+${timestampOffset}s] Response: ${latencyMs}ms, ${responseWords} words, ${responseChars} chars`);
+    
+    return { text: responseText };
   } catch (error) {
-    console.error("Error getting scene observation:", error);
+    const latencyMs = Date.now() - startTime;
+    console.error(`[INFER T+${timestampOffset}s] Error after ${latencyMs}ms:`, error);
     return { text: `Observation failed: ${error instanceof Error ? error.message : "Unknown error"}` };
   }
 }
@@ -208,20 +224,35 @@ Hard limits (must follow):
     max_new_tokens: 1024,
   };
 
+  const requestBody = JSON.stringify(payload);
+  const requestSizeKB = (requestBody.length / 1024).toFixed(1);
+  const totalObsChars = observationsPayload.reduce((sum, o) => sum + o.text.length, 0);
+  const promptChars = prompt.length;
+  
+  console.log(`[REASON] Request: ${requestSizeKB}KB payload, ${observationsPayload.length} observations (${totalObsChars} chars), prompt=${promptChars} chars, max_tokens=${payload.max_new_tokens}`);
+  const startTime = Date.now();
+
   try {
     const response = await fetch(`${COSMOS_ENDPOINT}/reason`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: requestBody,
     });
+
+    const latencyMs = Date.now() - startTime;
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.log(`[REASON] FAILED: ${response.status} after ${latencyMs}ms`);
       throw new Error(`Cosmos /reason API error: ${response.status} - ${errorText}`);
     }
 
     const apiResult = await response.json();
     const rawText = apiResult.raw_text || "";
+    const responseChars = rawText.length;
+    const responseWords = rawText.split(/\s+/).length;
+    
+    console.log(`[REASON] Response: ${latencyMs}ms, ${responseWords} words, ${responseChars} chars`);
     
     if (apiResult.result) {
       const parseResult = sceneAgentSynthesisSchema.safeParse(apiResult.result);
