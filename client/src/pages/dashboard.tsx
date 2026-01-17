@@ -517,6 +517,9 @@ export default function Dashboard() {
               activePromptCount={activePrompts.length}
               lastAnalysisTime={lastAnalysisTime}
               nextAnalysisIn={nextAnalysisIn}
+              minFrequency={activePrompts.length > 0 
+                ? Math.min(...activePrompts.map(p => p.frequencySeconds)) 
+                : 60}
               onToggleAnalysis={() => {
                 if (isAnalyzing) {
                   stopAnalysis();

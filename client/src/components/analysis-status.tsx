@@ -9,6 +9,7 @@ interface AnalysisStatusProps {
   activePromptCount: number;
   lastAnalysisTime: Date | null;
   nextAnalysisIn: number | null;
+  minFrequency: number;
   onToggleAnalysis: () => void;
 }
 
@@ -17,10 +18,11 @@ export function AnalysisStatus({
   activePromptCount,
   lastAnalysisTime,
   nextAnalysisIn,
+  minFrequency,
   onToggleAnalysis,
 }: AnalysisStatusProps) {
-  const progressPercent = nextAnalysisIn !== null
-    ? Math.max(0, 100 - (nextAnalysisIn / 60) * 100)
+  const progressPercent = nextAnalysisIn !== null && minFrequency > 0
+    ? Math.max(0, 100 - (nextAnalysisIn / minFrequency) * 100)
     : 0;
 
   return (
