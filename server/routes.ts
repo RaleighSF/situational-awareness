@@ -134,7 +134,7 @@ Be concise and factual. List your observations as bullet points.`;
   const payload = {
     image_b64: base64Data,
     prompt: prompt,
-    max_new_tokens: 128,
+    max_new_tokens: 96,
   };
 
   try {
