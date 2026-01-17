@@ -6,16 +6,17 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.6 (Current)
-- Production fix: Uploaded videos now use direct public GCS URLs instead of /objects/* paths
-- This ensures videos work in published deployments where the storage sidecar is unavailable
-- Backward compatible: existing /uploads/ and /attached_assets/ paths still work
+### v1.7 (Current)
+- Production fix: Reverted to local file storage for video uploads
+- Videos now upload via multipart/form-data to /api/video-sources/upload (multer-based)
+- Removed broken Object Storage entries from database
+- Note: Object Storage sidecar (127.0.0.1:1106) is unavailable in production deployments
+
+### v1.6
+- Attempted GCS URL fix (deprecated in favor of v1.7 local storage approach)
 
 ### v1.5
-- Cloud Object Storage: Uploaded videos now persist in Replit Object Storage (survives deploys)
-- Presigned URL upload flow: request-upload-url → direct cloud upload → complete-upload
-- Videos served via /objects/* endpoint from cloud storage
-- Backward compatibility with existing /uploads/ local files
+- Attempted Cloud Object Storage integration (deprecated - doesn't work in production)
 
 ### v1.4
 - Quick Frame Analysis: Camera icon opens modal to ask ad-hoc questions about captured frames
