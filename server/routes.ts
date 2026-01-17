@@ -163,30 +163,50 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
     confidence: o.confidence,
   }));
 
-  const prompt = `Analyze this security footage sequence. Return JSON only with ALL these fields:
+  const prompt = `Role: You are a Scene Intelligence Analyst reviewing a short time-ordered sequence from a fixed security camera.
+Your task is to deeply understand how the scene evolves over time — not just what is visible, but what changes, what persists, and why those changes matter.
+
+Return JSON only in the schema below.
+
+How to think before answering:
+  • First, mentally reconstruct the scene as a continuous sequence.
+  • Identify transitions: entries, exits, movements, posture changes, object interactions, starts/stops, increases/decreases.
+  • Identify stable elements that anchor the scene and provide context.
+  • Prefer comparative language over static description.
+  • Subtle changes (orientation shifts, proximity changes, confidence increases) are valid and valuable.
+
+Required output:
 
 {
-  "summary": "2-3 sentence executive overview of what's happening and key takeaway",
-  "changes": ["A person entered the frame from the left side", "Worker count increased from 2 to 3", "Forklift moved from idle to active"],
-  "persistent": ["Loading dock platform remained central throughout", "Two workers stayed in the same positions", "Weather conditions unchanged"],
-  "events": [{"t": 0, "description": "key moment in 12 words or less"}],
-  "anomalies": ["unusual observation if any"],
-  "escalations": ["urgent item if action needed"],
-  "confidence": 0.85
+  "summary": "2–3 sentence executive narrative explaining what unfolded and the key takeaway",
+  "changes": [
+    "Concise, high-signal descriptions of how the scene evolved (3–5 items)"
+  ],
+  "persistent": [
+    "Important elements that remained stable and contextualized the activity (3–5 items)"
+  ],
+  "events": [
+    { "t": 0, "description": "Timestamped moment capturing a meaningful transition (≤12 words)" }
+  ],
+  "anomalies": [
+    "Unexpected, non-routine, or notable deviations (if any)"
+  ],
+  "escalations": [
+    "Only include if conditions persist, intensify, or warrant attention"
+  ],
+  "confidence": 0.0
 }
 
-MANDATORY REQUIREMENTS:
-- changes: MUST have 3-5 items. Describe TRANSITIONS using "moved from X to Y", "entered/exited", "started/stopped", "changed from X to Y". Even subtle movements count.
-- persistent: MUST have 3-5 items. Use words like "remained", "stayed", "continued", "unchanged throughout".
-- events: MUST have 3-6 items with timestamps from the observations.
+Quality Bar (Important)
+  • changes must describe transitions, not static states
+    (use phrasing like entered/exited, shifted from X to Y, started/stopped, moved closer/farther, confidence increased from X to Y).
+  • persistent items must emphasize continuity
+    (use remained, stayed, continued, unchanged throughout).
+  • events should form a clear mini-timeline of the most meaningful moments — not a frame dump.
+  • Avoid generic object inventories. Focus on motion, interaction, and progression.
+  • Never return empty arrays for changes, persistent, or events.
 
-DELTA LANGUAGE EXAMPLES:
-  BAD: "Person crouches near box" (static - describes a state)
-  GOOD: "Worker shifted from standing to crouching position"
-  BAD: "Blue platform with yellow stripes" (static - just describing)
-  GOOD: "Blue platform remained central throughout the sequence"
-
-NEVER return empty arrays for changes, persistent, or events. There is ALWAYS something that changed and something that stayed the same.`;
+Think like a human reviewing footage to brief another human — concise, visual, and insightful.`;
 
   const payload = {
     prompt,
