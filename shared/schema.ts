@@ -96,7 +96,7 @@ export const frameObservationSchema = z.object({
 export const sceneAgentEventSchema = z.object({
   t: z.number(),
   description: z.string(),
-  rule_id: z.string().optional(),
+  rule_id: z.string().nullish(),
 });
 
 export const sceneAgentSynthesisSchema = z.object({

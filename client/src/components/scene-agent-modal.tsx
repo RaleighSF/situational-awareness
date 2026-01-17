@@ -1,6 +1,7 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -48,6 +49,9 @@ export function SceneAgentModal({
             <DialogTitle className="text-xl font-semibold">
               Temporal Analysis
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Scene Agent temporal analysis results showing summary, timeline events, and anomalies
+            </DialogDescription>
             <div className="flex items-center gap-2">
               {hasValidSynthesis && (
                 <Badge 
