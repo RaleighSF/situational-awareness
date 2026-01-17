@@ -163,55 +163,32 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
     confidence: o.confidence,
   }));
 
-  const prompt = `Role: You are a Scene Intelligence Analyst reviewing a short time-ordered sequence from a fixed security camera.
-Your task is to deeply understand how the scene evolves over time — not just what is visible, but what changes, what persists, and why those changes matter.
+  const prompt = `Role: Scene Intelligence Analyst reviewing time-ordered security camera footage.
 
-Return JSON only in the schema below.
-
-How to think before answering:
-  • First, mentally reconstruct the scene as a continuous sequence.
-  • Identify transitions: entries, exits, movements, posture changes, object interactions, starts/stops, increases/decreases.
-  • Identify stable elements that anchor the scene and provide context.
-  • Prefer comparative language over static description.
-  • Subtle changes (orientation shifts, proximity changes, confidence increases) are valid and valuable.
-
-Required output:
+CRITICAL: Return ONLY valid JSON. Keep ALL text fields SHORT and concise.
 
 {
-  "summary": "2–3 sentence executive narrative explaining what unfolded and the key takeaway",
-  "changes": [
-    "Concise, high-signal descriptions of how the scene evolved (3–5 items)"
-  ],
-  "persistent": [
-    "Important elements that remained stable and contextualized the activity (3–5 items)"
-  ],
-  "events": [
-    { "t": 0, "description": "Timestamped moment capturing a meaningful transition (≤12 words)" }
-  ],
-  "anomalies": [
-    "Unexpected, non-routine, or notable deviations (if any)"
-  ],
-  "escalations": [
-    "Only include if conditions persist, intensify, or warrant attention"
-  ],
-  "confidence": 0.0
+  "summary": "2-3 SHORT sentences only. What happened and key takeaway.",
+  "changes": ["3-5 transition descriptions using entered/exited/shifted/started/stopped"],
+  "persistent": ["3-5 stable elements using remained/stayed/continued/unchanged"],
+  "events": [{"t": 0, "description": "≤12 word moment"}],
+  "anomalies": ["unusual observations if any, else empty"],
+  "escalations": ["urgent items if any, else empty"],
+  "confidence": 0.85
 }
 
-Quality Bar (Important)
-  • changes must describe transitions, not static states
-    (use phrasing like entered/exited, shifted from X to Y, started/stopped, moved closer/farther, confidence increased from X to Y).
-  • persistent items must emphasize continuity
-    (use remained, stayed, continued, unchanged throughout).
-  • events should form a clear mini-timeline of the most meaningful moments — not a frame dump.
-  • Avoid generic object inventories. Focus on motion, interaction, and progression.
-  • Never return empty arrays for changes, persistent, or events.
-
-Think like a human reviewing footage to brief another human — concise, visual, and insightful.`;
+RULES:
+• summary: MAX 50 words total. Be brief.
+• changes: Describe TRANSITIONS (entered, exited, moved from X to Y, started, stopped)
+• persistent: Describe CONTINUITY (remained, stayed, continued, unchanged)
+• events: 3-6 timestamped moments, ≤12 words each
+• NEVER return empty arrays for changes, persistent, or events
+• Output valid JSON only - no extra text`;
 
   const payload = {
     prompt,
     observations: observationsPayload,
-    max_new_tokens: 768,
+    max_new_tokens: 1024,
   };
 
   try {
