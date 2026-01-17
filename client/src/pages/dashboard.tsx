@@ -472,8 +472,8 @@ export default function Dashboard() {
   };
 
   const startSceneAgent = async () => {
-    const durationSeconds = 30;
-    const intervalSeconds = 5;
+    const durationSeconds = 20;
+    const intervalSeconds = 4;
     const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1;
 
     setIsSceneAgentRunning(true);

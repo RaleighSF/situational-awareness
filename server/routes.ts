@@ -134,7 +134,7 @@ Be concise and factual. List your observations as bullet points.`;
   const payload = {
     image_b64: base64Data,
     prompt: prompt,
-    max_new_tokens: 256,
+    max_new_tokens: 128,
   };
 
   try {
@@ -177,7 +177,7 @@ Output ONLY valid JSON matching this schema.`;
   const payload = {
     prompt,
     observations: observationsPayload,
-    max_new_tokens: 512,
+    max_new_tokens: 256,
   };
 
   try {
@@ -440,23 +440,23 @@ export async function registerRoutes(
       
       const { frames, intervalSeconds, durationSeconds } = parseResult.data;
 
-      console.log(`[Scene Agent] Starting analysis of ${frames.length} frames over ${durationSeconds}s`);
+      console.log(`[Scene Agent] Starting parallel analysis of ${frames.length} frames over ${durationSeconds}s`);
       const startTime = new Date().toISOString();
 
-      const observations: FrameObservation[] = [];
-      for (let i = 0; i < frames.length; i++) {
+      const observationPromises = frames.map((frame, i) => {
         const timestampOffset = i * intervalSeconds;
-        console.log(`[Scene Agent] Analyzing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
-        
-        const observationResult = await getSceneObservation(frames[i], timestampOffset);
-        observations.push({
+        console.log(`[Scene Agent] Queueing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
+        return getSceneObservation(frame, timestampOffset).then(result => ({
           t: timestampOffset,
-          text: observationResult.text,
-          confidence: observationResult.confidence,
-        });
-      }
+          text: result.text,
+          confidence: result.confidence,
+        }));
+      });
 
-      console.log(`[Scene Agent] Synthesizing ${observations.length} observations via /reason`);
+      const observations = await Promise.all(observationPromises);
+      console.log(`[Scene Agent] All ${observations.length} frames analyzed in parallel`);
+
+      console.log(`[Scene Agent] Synthesizing observations via /reason`);
       const { synthesis, rawText } = await synthesizeObservations(observations);
 
       const endTime = new Date().toISOString();

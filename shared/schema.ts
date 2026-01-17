@@ -75,15 +75,15 @@ export type Prompt = typeof prompts.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
 
 export const sceneAgentConfigSchema = z.object({
-  durationSeconds: z.number().min(10).max(120).default(30),
-  intervalSeconds: z.number().min(5).max(30).default(5),
+  durationSeconds: z.number().min(10).max(120).default(20),
+  intervalSeconds: z.number().min(3).max(30).default(4),
   boundingBox: z.union([boundingBoxSchema, z.null()]).optional(),
 });
 
 export const sceneAgentRequestSchema = z.object({
   frames: z.array(z.string()).min(1, "At least one frame is required"),
-  intervalSeconds: z.number().min(5).max(30).default(5),
-  durationSeconds: z.number().min(10).max(120).default(30),
+  intervalSeconds: z.number().min(3).max(30).default(4),
+  durationSeconds: z.number().min(10).max(120).default(20),
 });
 
 export const frameObservationSchema = z.object({
