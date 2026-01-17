@@ -440,21 +440,30 @@ export async function registerRoutes(
       
       const { frames, intervalSeconds, durationSeconds } = parseResult.data;
 
-      console.log(`[Scene Agent] Starting parallel analysis of ${frames.length} frames over ${durationSeconds}s`);
+      console.log(`[Scene Agent] Starting analysis of ${frames.length} frames over ${durationSeconds}s (2 concurrent)`);
       const startTime = new Date().toISOString();
 
-      const observationPromises = frames.map((frame, i) => {
-        const timestampOffset = i * intervalSeconds;
-        console.log(`[Scene Agent] Queueing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
-        return getSceneObservation(frame, timestampOffset).then(result => ({
-          t: timestampOffset,
-          text: result.text,
-          confidence: result.confidence,
-        }));
-      });
-
-      const observations = await Promise.all(observationPromises);
-      console.log(`[Scene Agent] All ${observations.length} frames analyzed in parallel`);
+      const observations: FrameObservation[] = [];
+      const CONCURRENCY = 2;
+      
+      for (let i = 0; i < frames.length; i += CONCURRENCY) {
+        const batch = frames.slice(i, i + CONCURRENCY);
+        const batchPromises = batch.map((frame, batchIndex) => {
+          const frameIndex = i + batchIndex;
+          const timestampOffset = frameIndex * intervalSeconds;
+          console.log(`[Scene Agent] Analyzing frame ${frameIndex + 1}/${frames.length} at T+${timestampOffset}s`);
+          return getSceneObservation(frame, timestampOffset).then(result => ({
+            t: timestampOffset,
+            text: result.text,
+            confidence: result.confidence,
+          }));
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        observations.push(...batchResults);
+      }
+      
+      console.log(`[Scene Agent] All ${observations.length} frames analyzed`);
 
       console.log(`[Scene Agent] Synthesizing observations via /reason`);
       const { synthesis, rawText } = await synthesizeObservations(observations);
