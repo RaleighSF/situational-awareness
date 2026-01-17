@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Clock, TrendingUp, AlertTriangle, FileText, ShieldAlert } from "lucide-react";
+import { Clock, TrendingUp, Repeat, AlertTriangle, FileText } from "lucide-react";
 import type { SceneAgentResult } from "@shared/schema";
 
 interface SceneAgentModalProps {
@@ -38,14 +38,9 @@ export function SceneAgentModal({
           <div className="space-y-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Summary
-                  </div>
-                  <Badge variant={result.synthesis.confidence >= 0.7 ? "default" : "secondary"}>
-                    {Math.round(result.synthesis.confidence * 100)}% confidence
-                  </Badge>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Summary
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -55,28 +50,47 @@ export function SceneAgentModal({
                   {new Date(result.endTime).toLocaleTimeString()}
                 </p>
                 <Separator className="my-3" />
-                <p className="text-sm" data-testid="scene-agent-summary">
-                  {result.synthesis.summary}
+                <p className="text-sm" data-testid="scene-agent-narrative">
+                  {result.synthesis.narrative}
                 </p>
               </CardContent>
             </Card>
 
-            {result.synthesis.events.length > 0 && (
+            {result.synthesis.changes.length > 0 && (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-blue-500" />
-                    Events Detected
+                    Changes Detected
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ul className="space-y-2">
-                    {result.synthesis.events.map((event, i) => (
+                  <ul className="space-y-1">
+                    {result.synthesis.changes.map((change, i) => (
                       <li key={i} className="text-sm flex items-start gap-2">
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          T+{event.t}s
-                        </Badge>
-                        <span>{event.description}</span>
+                        <span className="text-blue-500 mt-1">•</span>
+                        <span>{change}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
+            {result.synthesis.persistent.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Repeat className="h-4 w-4 text-green-500" />
+                    Persistent Elements
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-1">
+                    {result.synthesis.persistent.map((item, i) => (
+                      <li key={i} className="text-sm flex items-start gap-2">
+                        <span className="text-green-500 mt-1">•</span>
+                        <span>{item}</span>
                       </li>
                     ))}
                   </ul>
@@ -98,27 +112,6 @@ export function SceneAgentModal({
                       <li key={i} className="text-sm flex items-start gap-2">
                         <span className="text-orange-500 mt-1">•</span>
                         <span>{anomaly}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            {result.synthesis.escalations.length > 0 && (
-              <Card className="border-red-200 dark:border-red-900">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <ShieldAlert className="h-4 w-4 text-red-500" />
-                    Recommended Actions
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-1">
-                    {result.synthesis.escalations.map((escalation, i) => (
-                      <li key={i} className="text-sm flex items-start gap-2">
-                        <span className="text-red-500 mt-1">•</span>
-                        <span>{escalation}</span>
                       </li>
                     ))}
                   </ul>
