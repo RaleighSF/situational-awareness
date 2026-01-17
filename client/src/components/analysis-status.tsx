@@ -63,7 +63,7 @@ export function AnalysisStatus({
           </Button>
         </div>
 
-        {isAnalyzing && nextAnalysisIn !== null && (
+        {isAnalyzing && nextAnalysisIn !== null && activePromptCount === 1 && (
           <div className="space-y-2 mb-4">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Next analysis</span>
