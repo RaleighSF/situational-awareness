@@ -6,7 +6,13 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.1 (Current)
+### v1.2 (Current)
+- Video upload capability: Users can upload MP4, WebM, OGG, or QuickTime videos (max 100MB)
+- Video source deletion: Uploaded sources can be deleted along with associated prompts and alerts
+- Upload files stored in /uploads directory with static serving
+- Green pulsing animation on AI Analysis card during active analysis (matches Scene Agent visuals)
+
+### v1.1
 - Source-specific profiles: Each video source maintains independent detection rules, bounding boxes, and Scene Agent settings
 - Database-driven video sources with settings stored in video_sources.settings JSONB column
 - Prompts filtered by videoSourceId for source-specific rule management
@@ -68,6 +74,8 @@ This application demonstrates how AI-powered vision analysis can automate securi
 ## API Endpoints
 
 - `GET /api/video-sources` - List all video sources with settings
+- `POST /api/video-sources/upload` - Upload a video file to create a new source (multipart/form-data)
+- `DELETE /api/video-sources/:id` - Delete a video source and its associated prompts/alerts (uploaded sources only)
 - `PATCH /api/video-sources/:id/settings` - Update source settings (boundingBox, sceneContext)
 - `GET /api/prompts?videoSourceId=xxx` - List detection rules for a specific source
 - `POST /api/prompts` - Create a new detection rule (requires videoSourceId)
