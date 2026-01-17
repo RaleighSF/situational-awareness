@@ -7,7 +7,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { TrendingUp, Repeat, Clock, AlertTriangle, AlertOctagon } from "lucide-react";
+import { Clock, AlertTriangle, AlertOctagon } from "lucide-react";
 import type { SceneAgentResult } from "@shared/schema";
 
 interface SceneAgentModalProps {
@@ -43,11 +43,11 @@ export function SceneAgentModal({
             </DialogTitle>
             {hasValidSynthesis && (
               <Badge 
-                variant={synthesis.confidence === "HIGH" ? "default" : "secondary"}
+                variant={synthesis.confidence >= 0.7 ? "default" : "secondary"}
                 className="text-xs"
                 data-testid="confidence-badge"
               >
-                {synthesis.confidence} Confidence
+                {Math.round(synthesis.confidence * 100)}% Confidence
               </Badge>
             )}
           </div>
@@ -107,43 +107,6 @@ export function SceneAgentModal({
               </>
             )}
 
-            {hasValidSynthesis && synthesis.changes.length > 0 && (
-              <>
-                <Separator />
-                <div>
-                  <div className="flex items-center gap-2 mb-3" data-testid="section-changes">
-                    <TrendingUp className="h-4 w-4 text-blue-500" />
-                    <h3 className="font-medium">What Changed</h3>
-                  </div>
-                  <ul className="space-y-2 pl-6">
-                    {synthesis.changes.map((item, i) => (
-                      <li key={i} className="text-sm text-muted-foreground list-disc" data-testid={`change-item-${i}`}>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </>
-            )}
-
-            {hasValidSynthesis && synthesis.persistent.length > 0 && (
-              <>
-                <Separator />
-                <div>
-                  <div className="flex items-center gap-2 mb-3" data-testid="section-persistent">
-                    <Repeat className="h-4 w-4 text-green-500" />
-                    <h3 className="font-medium">What Stayed the Same</h3>
-                  </div>
-                  <ul className="space-y-2 pl-6">
-                    {synthesis.persistent.map((item, i) => (
-                      <li key={i} className="text-sm text-muted-foreground list-disc" data-testid={`persistent-item-${i}`}>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </>
-            )}
 
             {result.observations.length > 0 && (
               <>

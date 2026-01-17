@@ -163,19 +163,9 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
     confidence: o.confidence,
   }));
 
-  const prompt = `Analyze this security footage sequence. You MUST respond with valid JSON containing ALL of these fields:
+  const prompt = `Synthesize the time-ordered observations from a single camera into the required JSON format. In summary, give a brief overview and explicitly note what remained consistent throughout the window. Populate events[] with a chronological list of meaningful changes or notable moments (include t in seconds). Use anomalies[] only for unexpected transitions or sharp confidence changes. Use escalations[] for conditions that persist or worsen across multiple observations. Set confidence (0-1) to reflect overall certainty. Return JSON only.
 
-{
-  "summary": "Detailed 2-3 sentence overview describing key activities and scene context",
-  "changes": ["item that changed or moved", "another change observed"],
-  "persistent": ["element that remained constant", "another persistent element"],
-  "events": [{"t": 0, "description": "what happened at this timestamp"}],
-  "anomalies": ["unusual observation if any"],
-  "escalations": ["urgent items requiring attention if any"],
-  "confidence": "HIGH"
-}
-
-IMPORTANT: The "changes" array must list things that changed/moved during the sequence. The "persistent" array must list things that stayed constant throughout. Both arrays are REQUIRED even if empty.`;
+{"summary": "...", "events": [{"t": 0, "description": "..."}], "anomalies": [], "escalations": [], "confidence": 0.85}`;
 
   const payload = {
     prompt,
@@ -214,12 +204,10 @@ IMPORTANT: The "changes" array must list things that changed/moved during the se
           return {
             synthesis: {
               summary: parsed.summary || "Analysis complete.",
-              changes: Array.isArray(parsed.changes) ? parsed.changes : [],
-              persistent: Array.isArray(parsed.persistent) ? parsed.persistent : [],
               events: Array.isArray(parsed.events) ? parsed.events : [],
               anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
               escalations: Array.isArray(parsed.escalations) ? parsed.escalations : [],
-              confidence: parsed.confidence || "MEDIUM",
+              confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
             },
             rawText,
           };

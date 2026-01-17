@@ -95,17 +95,15 @@ export const frameObservationSchema = z.object({
 export const sceneAgentEventSchema = z.object({
   t: z.number(),
   description: z.string(),
-  type: z.string().optional(),
+  rule_id: z.string().optional(),
 });
 
 export const sceneAgentSynthesisSchema = z.object({
   summary: z.string(),
-  changes: z.array(z.string()),
-  persistent: z.array(z.string()),
   events: z.array(sceneAgentEventSchema),
   anomalies: z.array(z.string()),
   escalations: z.array(z.string()),
-  confidence: z.string(),
+  confidence: z.number().min(0).max(1),
 });
 
 export const sceneAgentResultSchema = z.object({
