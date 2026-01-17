@@ -112,44 +112,48 @@ Be concise but thorough. If you detect the specified condition, explain exactly 
   }
 }
 
-async function getSceneObservation(frameData: string, timestampOffset: number, sceneContext?: string): Promise<{ text: string; confidence?: string }> {
-  if (!frameData || frameData.length < 100) {
-    return { text: "Invalid frame - could not analyze" };
-  }
-
-  const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
-  const base64Data = dataUrlMatch 
-    ? frameData.slice(dataUrlMatch[0].length)
-    : frameData;
-
+async function getBatchSceneObservations(
+  frames: string[], 
+  intervalSeconds: number, 
+  sceneContext?: string
+): Promise<FrameObservation[]> {
   const contextPreamble = sceneContext 
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const prompt = `${contextPreamble}You are observing a security camera feed at T+${timestampOffset}s. Describe exactly what you see in this frame in a factual, structured way.
+  const prompt = `${contextPreamble}You are observing a security camera feed. Describe exactly what you see in this frame in a factual, structured way.
 
 Focus on:
 - People: count, positions, activities, direction of movement
 - Vehicles/equipment: type, location, motion (entering/exiting/stationary)
 - Objects: notable items, packages, tools - position and state
-- Environment: lighting conditions, weather if visible
-- Actions: what is happening, who is doing what, motion blur indicating movement
+- Actions: what is happening, who is doing what
 
-IMPORTANT: Note any temporal cues - things that appear to be entering/exiting the frame, people walking toward/away, objects being picked up/set down, doors opening/closing.
+Note any temporal cues - things entering/exiting frame, people walking toward/away, objects being picked up/set down.
 
 Be detailed and factual. Use bullet points.`;
 
+  const items = frames.map((frameData, index) => {
+    const t = index * intervalSeconds;
+    const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
+    const image_b64 = dataUrlMatch 
+      ? frameData.slice(dataUrlMatch[0].length)
+      : frameData;
+    return { t, image_b64 };
+  });
+
   const payload = {
-    image_b64: base64Data,
-    prompt: prompt,
-    max_new_tokens: 192,
+    prompt,
+    max_new_tokens: 160,
+    max_image_side: 512,
+    items,
   };
 
   const requestBody = JSON.stringify(payload);
   const requestSizeKB = (requestBody.length / 1024).toFixed(1);
-  const targetUrl = `${COSMOS_ENDPOINT}/infer`;
+  const targetUrl = `${COSMOS_ENDPOINT}/infer_batch`;
   
-  console.log(`[INFER T+${timestampOffset}s] --> ${targetUrl} (${requestSizeKB}KB)`);
+  console.log(`[INFER_BATCH] --> ${targetUrl} (${requestSizeKB}KB, ${items.length} frames)`);
   const t0 = Date.now();
 
   try {
@@ -161,10 +165,11 @@ Be detailed and factual. Use bullet points.`;
 
     const t1 = Date.now();
     const fetchMs = t1 - t0;
-    console.log(`[INFER T+${timestampOffset}s] <-- status=${response.status} in ${fetchMs}ms (TTFB)`);
+    console.log(`[INFER_BATCH] <-- status=${response.status} in ${fetchMs}ms (TTFB)`);
 
     if (!response.ok) {
-      throw new Error(`Cosmos API error: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Cosmos /infer_batch API error: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
@@ -172,17 +177,25 @@ Be detailed and factual. Use bullet points.`;
     const parseMs = t2 - t1;
     const totalMs = t2 - t0;
     
-    const responseText = result.text || "No observation generated";
-    const responseWords = responseText.split(/\s+/).length;
-    const responseChars = responseText.length;
+    const batched = result.batched ?? false;
+    const count = result.count ?? 0;
+    const results = result.results ?? [];
     
-    console.log(`[INFER T+${timestampOffset}s] body parsed: +${parseMs}ms | TOTAL: ${totalMs}ms | ${responseWords} words, ${responseChars} chars`);
-    
-    return { text: responseText };
+    console.log(`[INFER_BATCH] body parsed: +${parseMs}ms | TOTAL: ${totalMs}ms | batched=${batched}, count=${count}`);
+
+    const observations: FrameObservation[] = results.map((r: { t: number; text: string }) => ({
+      t: r.t,
+      text: r.text || "No observation generated",
+    }));
+
+    return observations;
   } catch (error) {
     const totalMs = Date.now() - t0;
-    console.error(`[INFER T+${timestampOffset}s] ERROR after ${totalMs}ms:`, error);
-    return { text: `Observation failed: ${error instanceof Error ? error.message : "Unknown error"}` };
+    console.error(`[INFER_BATCH] ERROR after ${totalMs}ms:`, error);
+    return frames.map((_, index) => ({
+      t: index * intervalSeconds,
+      text: `Batch observation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    }));
   }
 }
 
@@ -513,30 +526,12 @@ export async function registerRoutes(
       
       const { frames, intervalSeconds, durationSeconds, sceneContext } = parseResult.data;
 
-      console.log(`[Scene Agent] Starting analysis of ${frames.length} frames over ${durationSeconds}s (2 concurrent)`);
+      console.log(`[Scene Agent] Starting batch analysis of ${frames.length} frames over ${durationSeconds}s`);
       const startTime = new Date().toISOString();
 
-      const observations: FrameObservation[] = [];
-      const CONCURRENCY = 2;
+      const observations = await getBatchSceneObservations(frames, intervalSeconds, sceneContext);
       
-      for (let i = 0; i < frames.length; i += CONCURRENCY) {
-        const batch = frames.slice(i, i + CONCURRENCY);
-        const batchPromises = batch.map((frame, batchIndex) => {
-          const frameIndex = i + batchIndex;
-          const timestampOffset = frameIndex * intervalSeconds;
-          console.log(`[Scene Agent] Analyzing frame ${frameIndex + 1}/${frames.length} at T+${timestampOffset}s`);
-          return getSceneObservation(frame, timestampOffset, sceneContext).then(result => ({
-            t: timestampOffset,
-            text: result.text,
-            confidence: result.confidence,
-          }));
-        });
-        
-        const batchResults = await Promise.all(batchPromises);
-        observations.push(...batchResults);
-      }
-      
-      console.log(`[Scene Agent] All ${observations.length} frames analyzed`);
+      console.log(`[Scene Agent] All ${observations.length} frames analyzed via batch`);
 
       console.log(`[Scene Agent] Synthesizing observations via /reason`);
       const { synthesis, rawText } = await synthesizeObservations(observations, sceneContext);
