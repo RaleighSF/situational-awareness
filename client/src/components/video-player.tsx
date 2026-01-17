@@ -125,29 +125,34 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
       }
 
       const targetBox = box ?? currentBox;
+      const MAX_DIMENSION = 480;
+      const JPEG_QUALITY = 0.5;
 
       try {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        let srcX = 0, srcY = 0;
+        let srcW = video.videoWidth, srcH = video.videoHeight;
 
         if (targetBox) {
-          const sx = (targetBox.x / 100) * video.videoWidth;
-          const sy = (targetBox.y / 100) * video.videoHeight;
-          const sw = (targetBox.width / 100) * video.videoWidth;
-          const sh = (targetBox.height / 100) * video.videoHeight;
-
-          canvas.width = Math.max(1, sw);
-          canvas.height = Math.max(1, sh);
-          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
-        } else {
-          ctx.drawImage(video, 0, 0);
+          srcX = (targetBox.x / 100) * video.videoWidth;
+          srcY = (targetBox.y / 100) * video.videoHeight;
+          srcW = (targetBox.width / 100) * video.videoWidth;
+          srcH = (targetBox.height / 100) * video.videoHeight;
         }
 
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        const scale = Math.min(1, MAX_DIMENSION / Math.max(srcW, srcH));
+        const destW = Math.max(1, Math.round(srcW * scale));
+        const destH = Math.max(1, Math.round(srcH * scale));
+
+        canvas.width = destW;
+        canvas.height = destH;
+        ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, destW, destH);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
         if (dataUrl.length < 100) {
           console.log("[VideoPlayer] Frame capture produced empty data");
           return null;
         }
+        console.log(`[VideoPlayer] Frame: ${destW}x${destH}, ${Math.round(dataUrl.length / 1024)}KB`);
         return dataUrl;
       } catch (error) {
         console.error("[VideoPlayer] Error capturing frame:", error);
