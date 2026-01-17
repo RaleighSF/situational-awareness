@@ -184,7 +184,8 @@ Please provide a clear, accurate, and helpful response based on what you observe
     }
 
     const apiResult = await response.json();
-    const content = apiResult.raw_text || apiResult.result || "";
+    console.log(`[ADHOC] <-- API result keys: ${Object.keys(apiResult).join(', ')}`);
+    const content = apiResult.text || apiResult.raw_text || apiResult.result || "";
     console.log(`[ADHOC] <-- Response: ${content.length} chars`);
     return content;
   } catch (error) {

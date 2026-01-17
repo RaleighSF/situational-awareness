@@ -63,14 +63,14 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData }: QuickAnalysis
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col border-2 border-[#76b900]">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">Quick Frame Analysis</DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 flex flex-col gap-4 min-h-0">
           {frameData && (
-            <div className="rounded-lg overflow-hidden border-2 border-[#76b900] bg-black/50">
+            <div className="rounded-lg overflow-hidden bg-black/50">
               <img
                 src={frameData}
                 alt="Captured frame"
