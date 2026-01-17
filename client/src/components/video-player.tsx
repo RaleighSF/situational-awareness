@@ -180,8 +180,8 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
     };
 
     return (
-      <Card className={`overflow-hidden transition-shadow duration-1000 ${isAnalyzing ? "animate-glow-breathe" : ""}`}>
-        <CardContent className="p-0">
+      <Card className={`transition-shadow duration-1000 ${isAnalyzing ? "animate-glow-breathe" : ""}`}>
+        <CardContent className="p-0 overflow-hidden">
           <div
             ref={containerRef}
             className="relative aspect-video bg-black cursor-crosshair"

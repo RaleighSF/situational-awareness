@@ -655,7 +655,6 @@ export default function Dashboard() {
                 <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center rounded-lg" data-testid="scene-agent-overlay">
                   <Loader2 className="h-12 w-12 text-white animate-spin mb-4" />
                   <p className="text-white text-lg font-medium">Monitoring the situation...</p>
-                  <p className="text-white/70 text-sm mt-2">{sceneAgentProgress}</p>
                 </div>
               )}
             </div>
