@@ -433,23 +433,25 @@ export async function registerRoutes(
       
       const { frames, intervalSeconds, durationSeconds } = parseResult.data;
 
-      console.log(`[Scene Agent] Starting analysis of ${frames.length} frames over ${durationSeconds}s`);
+      console.log(`[Scene Agent] Starting parallel analysis of ${frames.length} frames over ${durationSeconds}s`);
       const startTime = new Date().toISOString();
 
-      const observations: FrameObservation[] = [];
-      for (let i = 0; i < frames.length; i++) {
+      const observationPromises = frames.map(async (frame, i) => {
         const timestampOffset = i * intervalSeconds;
         console.log(`[Scene Agent] Analyzing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
         
-        const observation = await getSceneObservation(frames[i]);
-        observations.push({
+        const observation = await getSceneObservation(frame);
+        return {
           index: i,
           timestampOffset,
           observation,
-        });
-      }
+        };
+      });
 
-      console.log(`[Scene Agent] Synthesizing ${observations.length} observations`);
+      const observations = await Promise.all(observationPromises);
+      observations.sort((a, b) => a.index - b.index);
+
+      console.log(`[Scene Agent] All ${observations.length} observations complete, synthesizing`);
       const lastFrame = frames[frames.length - 1];
       const synthesis = await synthesizeObservations(observations, lastFrame);
 
