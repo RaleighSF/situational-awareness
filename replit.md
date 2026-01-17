@@ -6,7 +6,12 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.2 (Current)
+### v1.3 (Current)
+- Source-specific alerts: Alerts panel now filters by current video source instead of showing all alerts
+- Upload name dialog: Users can enter friendly names for uploaded videos instead of displaying raw filenames
+- Improved upload UX with cancel functionality and loading states
+
+### v1.2
 - Video upload capability: Users can upload MP4, WebM, OGG, or QuickTime videos (max 100MB)
 - Video source deletion: Uploaded sources can be deleted along with associated prompts and alerts
 - Upload files stored in /uploads directory with static serving
