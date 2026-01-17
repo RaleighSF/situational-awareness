@@ -105,7 +105,7 @@ export default function Dashboard() {
   const [quickAnalysisFrame, setQuickAnalysisFrame] = useState<string | null>(null);
   const [sceneAgentPhase, setSceneAgentPhase] = useState<"recording" | "analyzing" | null>(null);
   const [sceneAgentElapsed, setSceneAgentElapsed] = useState(0);
-  const [sceneAgentResult, setSceneAgentResult] = useState<SceneAgentResult | null>(null);
+  const [sceneAgentResults, setSceneAgentResults] = useState<Record<string, SceneAgentResult>>({});
   const [isSceneAgentModalOpen, setIsSceneAgentModalOpen] = useState(false);
   const [sceneAgentContext, setSceneAgentContext] = useState("");
   const [isSceneAgentSettingsOpen, setIsSceneAgentSettingsOpen] = useState(false);
@@ -120,6 +120,7 @@ export default function Dashboard() {
   });
 
   const currentSource = videoSources.find(s => s.id === currentVideoSourceId);
+  const currentSceneAgentResult = currentVideoSourceId ? sceneAgentResults[currentVideoSourceId] : null;
 
   useEffect(() => {
     if (videoSources.length > 0 && !currentVideoSourceId) {
@@ -719,7 +720,9 @@ export default function Dashboard() {
         throw new Error(result.error || "Scene Agent analysis failed");
       }
       
-      setSceneAgentResult(result);
+      if (currentVideoSourceId) {
+        setSceneAgentResults(prev => ({ ...prev, [currentVideoSourceId]: result }));
+      }
       setIsSceneAgentModalOpen(true);
       
       toast({
@@ -795,7 +798,7 @@ export default function Dashboard() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      if (sceneAgentResult && !isSceneAgentRunning) {
+                      if (currentSceneAgentResult && !isSceneAgentRunning) {
                         setIsSceneAgentModalOpen(true);
                       } else {
                         startSceneAgent();
@@ -810,7 +813,7 @@ export default function Dashboard() {
                     ) : (
                       <Bot className="h-4 w-4 mr-2" />
                     )}
-                    {isSceneAgentRunning ? "Monitoring..." : sceneAgentResult ? "View Report" : "Scene Agent"}
+                    {isSceneAgentRunning ? "Monitoring..." : currentSceneAgentResult ? "View Report" : "Scene Agent"}
                   </Button>
                   <Popover open={isSceneAgentSettingsOpen} onOpenChange={setIsSceneAgentSettingsOpen}>
                     <PopoverTrigger asChild>
@@ -1158,7 +1161,7 @@ export default function Dashboard() {
       <SceneAgentModal
         open={isSceneAgentModalOpen}
         onOpenChange={setIsSceneAgentModalOpen}
-        result={sceneAgentResult}
+        result={currentSceneAgentResult}
         onRefresh={startSceneAgent}
         isRefreshing={isSceneAgentRunning}
       />
