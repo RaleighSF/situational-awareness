@@ -163,7 +163,16 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
     confidence: o.confidence,
   }));
 
-  const prompt = `Across the full window, identify (1) what changed, (2) what remained consistent, and (3) any notable events/anomalies. Populate events[] with time-indexed changes; include persistent/stable conditions in the summary. Output JSON only in the required schema: { summary, events: [{t, description, type?}], anomalies: [], escalations: [], confidence: "HIGH|MEDIUM|LOW" }`;
+  const prompt = `Analyze this security footage sequence. Provide a JSON response with:
+- summary: A concise 1-2 sentence overview of the scene
+- changes: List of things that changed during the observation window
+- persistent: List of things that remained constant throughout
+- events: Array of time-indexed events [{t: seconds, description: "what happened", type?: "movement|arrival|departure|activity"}]
+- anomalies: List of unusual or noteworthy observations (empty if none)
+- escalations: List of items requiring immediate attention (empty if none)
+- confidence: "HIGH", "MEDIUM", or "LOW"
+
+Output ONLY valid JSON matching this schema.`;
 
   const payload = {
     prompt,
@@ -202,6 +211,8 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
           return {
             synthesis: {
               summary: parsed.summary || "Analysis complete.",
+              changes: Array.isArray(parsed.changes) ? parsed.changes : [],
+              persistent: Array.isArray(parsed.persistent) ? parsed.persistent : [],
               events: Array.isArray(parsed.events) ? parsed.events : [],
               anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
               escalations: Array.isArray(parsed.escalations) ? parsed.escalations : [],

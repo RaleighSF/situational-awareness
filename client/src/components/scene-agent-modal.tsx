@@ -3,13 +3,11 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Clock, TrendingUp, AlertTriangle, AlertOctagon, FileText, Activity } from "lucide-react";
+import { TrendingUp, Repeat, Clock, AlertTriangle, AlertOctagon } from "lucide-react";
 import type { SceneAgentResult } from "@shared/schema";
 
 interface SceneAgentModalProps {
@@ -28,165 +26,159 @@ export function SceneAgentModal({
   const synthesis = result.synthesis;
   const hasValidSynthesis = synthesis !== null;
 
+  const formatTimeRange = () => {
+    const start = new Date(result.startTime);
+    const end = new Date(result.endTime);
+    const duration = Math.round((end.getTime() - start.getTime()) / 1000);
+    return `${result.frameCount} frames over ${duration} seconds`;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh]" data-testid="scene-agent-modal">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Scene Agent Analysis
-          </DialogTitle>
-          <DialogDescription>
-            Temporal analysis of {result.frameCount} frames
-          </DialogDescription>
+      <DialogContent className="max-w-2xl max-h-[85vh] p-0 overflow-hidden" data-testid="scene-agent-modal">
+        <DialogHeader className="px-6 pt-6 pb-4">
+          <div className="flex items-center justify-between gap-4">
+            <DialogTitle className="text-xl font-semibold">
+              Temporal Analysis
+            </DialogTitle>
+            {hasValidSynthesis && (
+              <Badge 
+                variant={synthesis.confidence === "HIGH" ? "default" : "secondary"}
+                className="text-xs"
+                data-testid="confidence-badge"
+              >
+                {synthesis.confidence} Confidence
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            {formatTimeRange()}
+          </p>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[70vh] pr-4">
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Summary
-                  </span>
-                  {hasValidSynthesis && (
-                    <Badge 
-                      variant={synthesis.confidence === "HIGH" ? "default" : "secondary"}
-                      data-testid="confidence-badge"
-                    >
-                      {synthesis.confidence} Confidence
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Analyzed {result.frameCount} frames from{" "}
-                  {new Date(result.startTime).toLocaleTimeString()} to{" "}
-                  {new Date(result.endTime).toLocaleTimeString()}
+        <ScrollArea className="max-h-[calc(85vh-100px)]">
+          <div className="px-6 pb-6 space-y-6">
+            {hasValidSynthesis && synthesis.summary && (
+              <div data-testid="scene-agent-summary">
+                <p className="text-base leading-relaxed">
+                  {synthesis.summary}
                 </p>
-                <Separator className="my-3" />
-                <p className="text-sm" data-testid="scene-agent-summary">
-                  {hasValidSynthesis ? synthesis.summary : result.rawText || "Analysis could not generate a structured summary."}
-                </p>
-              </CardContent>
-            </Card>
+              </div>
+            )}
 
-            {hasValidSynthesis && synthesis.events.length > 0 && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-blue-500" />
-                    Events Timeline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {synthesis.events.map((event, i) => (
-                      <div key={i} className="flex items-start gap-3 text-sm">
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          T+{event.t}s
-                        </Badge>
-                        <span>{event.description}</span>
-                        {event.type && (
-                          <Badge variant="secondary" className="text-xs shrink-0">
-                            {event.type}
-                          </Badge>
-                        )}
+            {hasValidSynthesis && (synthesis.anomalies.length > 0 || synthesis.escalations.length > 0) && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  {synthesis.escalations.length > 0 && (
+                    <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertOctagon className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        <h3 className="font-medium text-red-900 dark:text-red-100">Requires Attention</h3>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {hasValidSynthesis && synthesis.anomalies.length > 0 && (
-              <Card className="border-orange-200 dark:border-orange-900">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-orange-500" />
-                    Anomalies Detected
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-1">
-                    {synthesis.anomalies.map((anomaly, i) => (
-                      <li key={i} className="text-sm flex items-start gap-2">
-                        <span className="text-orange-500 mt-1">•</span>
-                        <span>{anomaly}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            {hasValidSynthesis && synthesis.escalations.length > 0 && (
-              <Card className="border-red-200 dark:border-red-900">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <AlertOctagon className="h-4 w-4 text-red-500" />
-                    Escalations Required
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-1">
-                    {synthesis.escalations.map((escalation, i) => (
-                      <li key={i} className="text-sm flex items-start gap-2">
-                        <span className="text-red-500 mt-1">•</span>
-                        <span>{escalation}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Activity className="h-4 w-4" />
-                  Frame Observations
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {result.observations.map((obs, index) => (
-                    <div key={index} className="border-l-2 border-muted pl-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="secondary" className="text-xs">
-                          T+{obs.t}s
-                        </Badge>
-                        {obs.confidence && (
-                          <Badge variant="outline" className="text-xs">
-                            {obs.confidence}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                        {obs.text}
-                      </p>
+                      <ul className="space-y-2">
+                        {synthesis.escalations.map((item, i) => (
+                          <li key={i} className="text-sm text-red-800 dark:text-red-200 flex items-start gap-2">
+                            <span className="text-red-500 mt-0.5">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  )}
 
-            {result.rawText && !hasValidSynthesis && (
-              <Card className="border-muted">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    Raw Analysis Output
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap bg-muted/50 p-3 rounded-md">
-                    {result.rawText}
-                  </pre>
-                </CardContent>
-              </Card>
+                  {synthesis.anomalies.length > 0 && (
+                    <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <h3 className="font-medium text-amber-900 dark:text-amber-100">Notable Observations</h3>
+                      </div>
+                      <ul className="space-y-2">
+                        {synthesis.anomalies.map((item, i) => (
+                          <li key={i} className="text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+                            <span className="text-amber-500 mt-0.5">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {hasValidSynthesis && synthesis.changes.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <div className="flex items-center gap-2 mb-3" data-testid="section-changes">
+                    <TrendingUp className="h-4 w-4 text-blue-500" />
+                    <h3 className="font-medium">What Changed</h3>
+                  </div>
+                  <ul className="space-y-2 pl-6">
+                    {synthesis.changes.map((item, i) => (
+                      <li key={i} className="text-sm text-muted-foreground list-disc" data-testid={`change-item-${i}`}>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+
+            {hasValidSynthesis && synthesis.persistent.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <div className="flex items-center gap-2 mb-3" data-testid="section-persistent">
+                    <Repeat className="h-4 w-4 text-green-500" />
+                    <h3 className="font-medium">What Stayed the Same</h3>
+                  </div>
+                  <ul className="space-y-2 pl-6">
+                    {synthesis.persistent.map((item, i) => (
+                      <li key={i} className="text-sm text-muted-foreground list-disc" data-testid={`persistent-item-${i}`}>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+
+            {result.observations.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <div className="flex items-center gap-2 mb-4" data-testid="section-timeline">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="font-medium">Timeline</h3>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+                    <div className="space-y-4">
+                      {result.observations.map((obs, index) => (
+                        <div key={index} className="relative pl-6" data-testid={`timeline-entry-${index}`}>
+                          <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full bg-background border-2 border-muted-foreground" />
+                          <div>
+                            <span className="text-xs font-medium text-foreground">
+                              T+{obs.t}s
+                            </span>
+                            <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
+                              {obs.text}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {!hasValidSynthesis && (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>Analysis could not generate structured results.</p>
+              </div>
             )}
           </div>
         </ScrollArea>
