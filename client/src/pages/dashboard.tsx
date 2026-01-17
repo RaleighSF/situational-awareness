@@ -405,7 +405,6 @@ export default function Dashboard() {
   const handleTestPrompt = async (prompt: Prompt) => {
     setTestingPrompt(prompt);
     setTestResult(null);
-    setIsTestResultOpen(true);
     setIsTestLoading(true);
     
     try {
@@ -416,10 +415,17 @@ export default function Dashboard() {
           description: "Video is not ready. Please wait for it to load.",
           variant: "destructive",
         });
-        setIsTestResultOpen(false);
         setIsTestLoading(false);
         return;
       }
+      
+      setTestResult({
+        detected: false,
+        analysis: "",
+        confidence: "analyzing",
+        frameData,
+      });
+      setIsTestResultOpen(true);
       
       const response = await apiRequest("POST", "/api/analyze", {
         frameData,
@@ -638,52 +644,56 @@ export default function Dashboard() {
         <DialogContent className="max-w-lg" data-testid="dialog-test-result">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              Test Result: {testingPrompt?.name}
+              {testResult?.confidence === "analyzing" ? "Frame Captured" : "Test Result"}: {testingPrompt?.name}
             </DialogTitle>
           </DialogHeader>
           
-          {isTestLoading ? (
-            <div className="flex flex-col items-center justify-center py-8 gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Analyzing frame with Cosmos AI...</p>
-            </div>
-          ) : testResult ? (
+          {testResult ? (
             <div className="space-y-4">
               {testResult.frameData && (
                 <div className="rounded-md overflow-hidden border">
                   <img 
                     src={testResult.frameData} 
-                    alt="Analyzed frame" 
+                    alt="Captured frame" 
                     className="w-full h-auto"
                     data-testid="img-test-frame"
                   />
                 </div>
               )}
               
-              <div className={`flex items-center gap-2 p-3 rounded-md ${
-                testResult.detected 
-                  ? "bg-destructive/10 text-destructive" 
-                  : "bg-green-500/10 text-green-600 dark:text-green-400"
-              }`}>
-                {testResult.detected ? (
-                  <CheckCircle2 className="h-5 w-5" />
-                ) : (
-                  <XCircle className="h-5 w-5" />
-                )}
-                <span className="font-medium">
-                  {testResult.detected ? "Condition Detected" : "No Detection"}
-                </span>
-                <Badge variant="outline" className="ml-auto">
-                  {testResult.confidence} confidence
-                </Badge>
-              </div>
-              
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">AI Analysis</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {testResult.analysis}
-                </p>
-              </div>
+              {testResult.confidence === "analyzing" ? (
+                <div className="flex items-center gap-3 p-3 rounded-md bg-primary/10">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-sm font-medium">Analyzing frame with Cosmos AI...</span>
+                </div>
+              ) : (
+                <>
+                  <div className={`flex items-center gap-2 p-3 rounded-md ${
+                    testResult.detected 
+                      ? "bg-destructive/10 text-destructive" 
+                      : "bg-green-500/10 text-green-600 dark:text-green-400"
+                  }`}>
+                    {testResult.detected ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : (
+                      <XCircle className="h-5 w-5" />
+                    )}
+                    <span className="font-medium">
+                      {testResult.detected ? "Condition Detected" : "No Detection"}
+                    </span>
+                    <Badge variant="outline" className="ml-auto">
+                      {testResult.confidence} confidence
+                    </Badge>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium">AI Analysis</h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {testResult.analysis}
+                    </p>
+                  </div>
+                </>
+              )}
               
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Detection Rule</h4>

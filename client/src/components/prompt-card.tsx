@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { MoreHorizontal, Clock, Square, Pencil, Trash2, Eye, FlaskConical } from "lucide-react";
+import { MoreHorizontal, Clock, Square, Pencil, Trash2, Eye, Camera } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,10 +58,6 @@ export function PromptCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onTest(prompt); }} data-testid={`button-test-prompt-${prompt.id}`}>
-                <FlaskConical className="h-4 w-4 mr-2" />
-                Test Rule
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(prompt); }} data-testid={`button-edit-prompt-${prompt.id}`}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit
@@ -108,6 +104,19 @@ export function PromptCard({
             data-testid={`switch-prompt-active-${prompt.id}`}
           />
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTest(prompt);
+          }}
+          data-testid={`button-test-prompt-${prompt.id}`}
+        >
+          <Camera className="h-4 w-4 mr-2" />
+          Capture & Test
+        </Button>
       </CardContent>
     </Card>
   );
