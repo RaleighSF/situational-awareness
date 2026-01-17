@@ -92,12 +92,21 @@ export const frameObservationSchema = z.object({
   observation: z.string(),
 });
 
-export const sceneAgentSynthesisSchema = z.object({
-  changes: z.array(z.string()),
-  persistent: z.array(z.string()),
-  anomalies: z.array(z.string()),
-  narrative: z.string(),
+export const sceneAgentEventSchema = z.object({
+  t: z.number(),
+  description: z.string(),
+  rule_id: z.string().optional(),
 });
+
+export const sceneAgentSynthesisSchema = z.object({
+  summary: z.string(),
+  events: z.array(sceneAgentEventSchema),
+  anomalies: z.array(z.string()),
+  escalations: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+});
+
+export type SceneAgentEvent = z.infer<typeof sceneAgentEventSchema>;
 
 export const sceneAgentResultSchema = z.object({
   observations: z.array(frameObservationSchema),

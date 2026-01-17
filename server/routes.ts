@@ -156,36 +156,22 @@ Be concise and factual. List your observations as bullet points.`;
   }
 }
 
-async function synthesizeObservations(observations: FrameObservation[], lastFrame: string): Promise<SceneAgentSynthesis> {
-  const timeline = observations
-    .map(o => `[T+${o.timestampOffset}s] ${o.observation}`)
-    .join("\n\n");
+async function synthesizeObservations(observations: FrameObservation[]): Promise<SceneAgentSynthesis> {
+  const formattedObservations = observations.map(o => ({
+    t: o.timestampOffset,
+    observation: o.observation,
+  }));
 
-  const prompt = `You are analyzing a sequence of observations from a security camera taken over time. Here is the timeline of observations:
-
-${timeline}
-
-Based on this sequence, provide a temporal analysis in EXACTLY this JSON format:
-{
-  "changes": ["list of things that changed between frames"],
-  "persistent": ["list of things that stayed constant throughout"],
-  "anomalies": ["list of any unusual or noteworthy events"],
-  "narrative": "A brief 2-3 sentence summary of what happened during this time period"
-}
-
-Focus on temporal patterns - what evolved, what remained stable, and any notable events. Return ONLY the JSON object, no other text.`;
-
-  // Extract base64 data from the last frame (remove data URL prefix if present)
-  const imageBase64 = lastFrame.includes(",") ? lastFrame.split(",")[1] : lastFrame;
+  const prompt = `You are given sequential observations from the same security camera over a time window. Analyze the temporal patterns and synthesize them into a structured report. Return JSON only with keys: summary (brief 2-3 sentence overview), events (array of {t, description}), anomalies (array of unusual patterns or changes), escalations (array of recommended actions if situation warrants attention), confidence (0-1 overall confidence in analysis).`;
 
   const payload = {
-    image_b64: imageBase64,
     prompt: prompt,
-    max_new_tokens: 512,
+    observations: formattedObservations,
+    max_new_tokens: 256,
   };
 
   try {
-    const response = await fetch(`${COSMOS_ENDPOINT}/infer`, {
+    const response = await fetch(`${COSMOS_ENDPOINT}/reason`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -195,37 +181,44 @@ Focus on temporal patterns - what evolved, what remained stable, and any notable
       throw new Error(`Cosmos API error: ${response.status}`);
     }
 
-    const result = await response.json();
-    const text = result.text || "";
+    const data = await response.json();
     
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          changes: Array.isArray(parsed.changes) ? parsed.changes : [],
-          persistent: Array.isArray(parsed.persistent) ? parsed.persistent : [],
-          anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
-          narrative: typeof parsed.narrative === "string" ? parsed.narrative : "Analysis complete.",
-        };
-      } catch {
-        console.error("Failed to parse synthesis JSON:", text);
-      }
+    if (data.result) {
+      return {
+        summary: data.result.summary || "Analysis complete.",
+        events: Array.isArray(data.result.events) ? data.result.events : [],
+        anomalies: Array.isArray(data.result.anomalies) ? data.result.anomalies : [],
+        escalations: Array.isArray(data.result.escalations) ? data.result.escalations : [],
+        confidence: typeof data.result.confidence === "number" ? data.result.confidence : 0.5,
+      };
+    }
+
+    if (data.raw_text) {
+      console.log("[Scene Agent] Using raw_text fallback:", data.raw_text);
+      return {
+        summary: data.raw_text,
+        events: [],
+        anomalies: [],
+        escalations: [],
+        confidence: 0.5,
+      };
     }
 
     return {
-      changes: [],
-      persistent: [],
+      summary: "Unable to generate synthesis from observations.",
+      events: [],
       anomalies: [],
-      narrative: text || "Unable to generate synthesis from observations.",
+      escalations: [],
+      confidence: 0,
     };
   } catch (error) {
     console.error("Error synthesizing observations:", error);
     return {
-      changes: [],
-      persistent: [],
+      summary: `Synthesis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      events: [],
       anomalies: [],
-      narrative: `Synthesis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      escalations: [],
+      confidence: 0,
     };
   }
 }
@@ -450,9 +443,8 @@ export async function registerRoutes(
         });
       }
 
-      console.log(`[Scene Agent] Synthesizing ${observations.length} observations`);
-      const lastFrame = frames[frames.length - 1];
-      const synthesis = await synthesizeObservations(observations, lastFrame);
+      console.log(`[Scene Agent] Synthesizing ${observations.length} observations via /reason endpoint`);
+      const synthesis = await synthesizeObservations(observations);
 
       const endTime = new Date().toISOString();
 
