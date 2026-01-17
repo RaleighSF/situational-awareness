@@ -31,6 +31,7 @@ import {
   Loader2,
   ChevronDown,
   Bot,
+  Settings,
 } from "lucide-react";
 import { SiNvidia } from "react-icons/si";
 import {
@@ -40,6 +41,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import type { Prompt, Alert, BoundingBox, SceneAgentResult } from "@shared/schema";
 
 const VIDEO_SOURCES = [
@@ -106,6 +114,10 @@ export default function Dashboard() {
   const [sceneAgentElapsed, setSceneAgentElapsed] = useState(0);
   const [sceneAgentResult, setSceneAgentResult] = useState<SceneAgentResult | null>(null);
   const [isSceneAgentModalOpen, setIsSceneAgentModalOpen] = useState(false);
+  const [sceneAgentContext, setSceneAgentContext] = useState(() => {
+    return localStorage.getItem("sceneAgentContext") || "";
+  });
+  const [isSceneAgentSettingsOpen, setIsSceneAgentSettingsOpen] = useState(false);
   const sceneAgentFramesRef = useRef<string[]>([]);
 
   const { data: prompts = [], isLoading: promptsLoading } = useQuery<Prompt[]>({
@@ -525,6 +537,7 @@ export default function Dashboard() {
             frames: sceneAgentFramesRef.current,
             intervalSeconds,
             durationSeconds,
+            sceneContext: sceneAgentContext || undefined,
           });
         }
       };
@@ -567,6 +580,7 @@ export default function Dashboard() {
           frames: sceneAgentFramesRef.current,
           intervalSeconds,
           durationSeconds,
+          sceneContext: sceneAgentContext || undefined,
         });
       }
 
@@ -650,27 +664,72 @@ export default function Dashboard() {
                   <Crosshair className="h-4 w-4 mr-2" />
                   {isDrawingMode ? "Drawing Region" : "Draw Region"}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (sceneAgentResult && !isSceneAgentRunning) {
-                      setIsSceneAgentModalOpen(true);
-                    } else {
-                      startSceneAgent();
-                    }
-                  }}
-                  disabled={isSceneAgentRunning}
-                  className="text-primary"
-                  data-testid="button-scene-agent"
-                >
-                  {isSceneAgentRunning ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Bot className="h-4 w-4 mr-2" />
-                  )}
-                  {isSceneAgentRunning ? "Monitoring..." : sceneAgentResult ? "View Report" : "Scene Agent"}
-                </Button>
+                <div className="flex items-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (sceneAgentResult && !isSceneAgentRunning) {
+                        setIsSceneAgentModalOpen(true);
+                      } else {
+                        startSceneAgent();
+                      }
+                    }}
+                    disabled={isSceneAgentRunning}
+                    className="text-primary rounded-r-none border-r-0"
+                    data-testid="button-scene-agent"
+                  >
+                    {isSceneAgentRunning ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Bot className="h-4 w-4 mr-2" />
+                    )}
+                    {isSceneAgentRunning ? "Monitoring..." : sceneAgentResult ? "View Report" : "Scene Agent"}
+                  </Button>
+                  <Popover open={isSceneAgentSettingsOpen} onOpenChange={setIsSceneAgentSettingsOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`rounded-l-none px-2 ${sceneAgentContext ? 'text-primary' : ''}`}
+                        data-testid="button-scene-agent-settings"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="end">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="scene-context">Scene Context (Optional)</Label>
+                          <Textarea
+                            id="scene-context"
+                            placeholder="Describe the scene to help focus the AI analysis. e.g., 'This is a loading dock. Pay attention to worker safety and package handling.'"
+                            value={sceneAgentContext}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setSceneAgentContext(value);
+                              localStorage.setItem("sceneAgentContext", value);
+                            }}
+                            rows={4}
+                            className="resize-none"
+                            data-testid="textarea-scene-context"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            This context will be used to guide the AI's analysis of the scene.
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="w-full"
+                          onClick={() => setIsSceneAgentSettingsOpen(false)}
+                        >
+                          Done
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
             </div>
 

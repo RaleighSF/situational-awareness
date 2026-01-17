@@ -112,7 +112,7 @@ Be concise but thorough. If you detect the specified condition, explain exactly 
   }
 }
 
-async function getSceneObservation(frameData: string, timestampOffset: number): Promise<{ text: string; confidence?: string }> {
+async function getSceneObservation(frameData: string, timestampOffset: number, sceneContext?: string): Promise<{ text: string; confidence?: string }> {
   if (!frameData || frameData.length < 100) {
     return { text: "Invalid frame - could not analyze" };
   }
@@ -122,7 +122,11 @@ async function getSceneObservation(frameData: string, timestampOffset: number): 
     ? frameData.slice(dataUrlMatch[0].length)
     : frameData;
 
-  const prompt = `You are observing a security camera feed at T+${timestampOffset}s. Describe exactly what you see in this frame in a factual, structured way. Focus on:
+  const contextPreamble = sceneContext 
+    ? `Scene Context: ${sceneContext}\n\n` 
+    : "";
+
+  const prompt = `${contextPreamble}You are observing a security camera feed at T+${timestampOffset}s. Describe exactly what you see in this frame in a factual, structured way. Focus on:
 - People present (count, positions, activities)
 - Vehicles or equipment visible
 - Environmental conditions (lighting, weather if visible)
@@ -156,14 +160,18 @@ Be concise and factual. List your observations as bullet points.`;
   }
 }
 
-async function synthesizeObservations(observations: FrameObservation[]): Promise<{ synthesis: SceneAgentSynthesis | null; rawText: string }> {
+async function synthesizeObservations(observations: FrameObservation[], sceneContext?: string): Promise<{ synthesis: SceneAgentSynthesis | null; rawText: string }> {
   const observationsPayload = observations.map(o => ({
     t: o.t,
     text: o.text,
     confidence: o.confidence,
   }));
 
-  const prompt = `Role: Scene Intelligence Analyst reviewing time-ordered security camera footage.
+  const contextPreamble = sceneContext 
+    ? `Scene Context from operator: "${sceneContext}"\nUse this context to focus your analysis.\n\n` 
+    : "";
+
+  const prompt = `${contextPreamble}Role: Scene Intelligence Analyst reviewing time-ordered security camera footage.
 
 CRITICAL: Return ONLY valid JSON. Keep ALL text fields SHORT and concise.
 
@@ -449,7 +457,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: errorMessage });
       }
       
-      const { frames, intervalSeconds, durationSeconds } = parseResult.data;
+      const { frames, intervalSeconds, durationSeconds, sceneContext } = parseResult.data;
 
       console.log(`[Scene Agent] Starting analysis of ${frames.length} frames over ${durationSeconds}s (2 concurrent)`);
       const startTime = new Date().toISOString();
@@ -463,7 +471,7 @@ export async function registerRoutes(
           const frameIndex = i + batchIndex;
           const timestampOffset = frameIndex * intervalSeconds;
           console.log(`[Scene Agent] Analyzing frame ${frameIndex + 1}/${frames.length} at T+${timestampOffset}s`);
-          return getSceneObservation(frame, timestampOffset).then(result => ({
+          return getSceneObservation(frame, timestampOffset, sceneContext).then(result => ({
             t: timestampOffset,
             text: result.text,
             confidence: result.confidence,
@@ -477,7 +485,7 @@ export async function registerRoutes(
       console.log(`[Scene Agent] All ${observations.length} frames analyzed`);
 
       console.log(`[Scene Agent] Synthesizing observations via /reason`);
-      const { synthesis, rawText } = await synthesizeObservations(observations);
+      const { synthesis, rawText } = await synthesizeObservations(observations, sceneContext);
 
       const endTime = new Date().toISOString();
 
