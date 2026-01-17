@@ -532,11 +532,6 @@ Hard limits (must follow):
 
 const DEFAULT_VIDEO_SOURCES = [
   {
-    id: "got-commercial",
-    name: "GoT Commercial",
-    url: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-  },
-  {
     id: "loading-dock",
     name: "Loading Dock",
     url: "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4",
