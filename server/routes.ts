@@ -126,19 +126,23 @@ async function getSceneObservation(frameData: string, timestampOffset: number, s
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const prompt = `${contextPreamble}You are observing a security camera feed at T+${timestampOffset}s. Describe exactly what you see in this frame in a factual, structured way. Focus on:
-- People present (count, positions, activities)
-- Vehicles or equipment visible
-- Environmental conditions (lighting, weather if visible)
-- Any notable objects or items
-- Movement or actions occurring
+  const prompt = `${contextPreamble}You are observing a security camera feed at T+${timestampOffset}s. Describe exactly what you see in this frame in a factual, structured way.
 
-Be concise and factual. List your observations as bullet points.`;
+Focus on:
+- People: count, positions, activities, direction of movement
+- Vehicles/equipment: type, location, motion (entering/exiting/stationary)
+- Objects: notable items, packages, tools - position and state
+- Environment: lighting conditions, weather if visible
+- Actions: what is happening, who is doing what, motion blur indicating movement
+
+IMPORTANT: Note any temporal cues - things that appear to be entering/exiting the frame, people walking toward/away, objects being picked up/set down, doors opening/closing.
+
+Be detailed and factual. Use bullet points.`;
 
   const payload = {
     image_b64: base64Data,
     prompt: prompt,
-    max_new_tokens: 96,
+    max_new_tokens: 192,
   };
 
   try {
