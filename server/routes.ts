@@ -195,7 +195,7 @@ RULES:
   const payload = {
     prompt,
     observations: observationsPayload,
-    max_new_tokens: 512,
+    max_new_tokens: 768,
   };
 
   try {
