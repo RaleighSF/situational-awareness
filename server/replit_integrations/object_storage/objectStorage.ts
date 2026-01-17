@@ -130,7 +130,7 @@ export class ObjectStorageService {
     }
   }
 
-  // Gets the upload URL for an object entity.
+  // Gets the upload URL for an object entity (private).
   async getObjectEntityUploadURL(): Promise<string> {
     const privateObjectDir = this.getPrivateObjectDir();
     if (!privateObjectDir) {
@@ -152,6 +152,38 @@ export class ObjectStorageService {
       method: "PUT",
       ttlSec: 900,
     });
+  }
+
+  // Gets the upload URL for a PUBLIC object (accessible without auth in production).
+  async getPublicObjectUploadURL(): Promise<{ uploadUrl: string; publicUrl: string; objectPath: string }> {
+    const publicPaths = this.getPublicObjectSearchPaths();
+    if (publicPaths.length === 0) {
+      throw new Error(
+        "PUBLIC_OBJECT_SEARCH_PATHS not set. Create a bucket in 'Object Storage' " +
+          "tool and set PUBLIC_OBJECT_SEARCH_PATHS env var."
+      );
+    }
+
+    // Use the first public path
+    const publicDir = publicPaths[0];
+    const objectId = randomUUID();
+    const fullPath = `${publicDir}/uploads/${objectId}`;
+
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+
+    // Sign URL for PUT method with TTL
+    const uploadUrl = await signObjectURL({
+      bucketName,
+      objectName,
+      method: "PUT",
+      ttlSec: 900,
+    });
+
+    // Generate the public GCS URL that will be accessible after upload
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${objectName}`;
+    const objectPath = `/objects/${objectName}`;
+
+    return { uploadUrl, publicUrl, objectPath };
   }
 
   // Gets the object entity file from the object path.

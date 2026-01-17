@@ -646,9 +646,9 @@ export async function registerRoutes(
       if (contentType && !allowedTypes.includes(contentType)) {
         return res.status(400).json({ error: "Invalid video type. Only MP4, WebM, OGG, and MOV are allowed." });
       }
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-      res.json({ uploadURL, objectPath, name });
+      // Use public upload URL so videos are accessible in production without sidecar
+      const { uploadUrl, publicUrl, objectPath } = await objectStorageService.getPublicObjectUploadURL();
+      res.json({ uploadURL: uploadUrl, objectPath, publicUrl, name });
     } catch (error) {
       console.error("Error generating video upload URL:", error);
       res.status(500).json({ error: "Failed to generate upload URL" });
@@ -657,21 +657,15 @@ export async function registerRoutes(
 
   app.post("/api/video-sources/complete-upload", async (req, res) => {
     try {
-      const { name, objectPath } = req.body;
-      if (!name || !objectPath) {
-        return res.status(400).json({ error: "Name and objectPath are required" });
+      const { name, publicUrl } = req.body;
+      if (!name || !publicUrl) {
+        return res.status(400).json({ error: "Name and publicUrl are required" });
       }
-      const { publicUrl } = await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
-        owner: "system",
-        visibility: "public",
-      });
       // Use the direct public GCS URL for production compatibility
-      // The publicUrl allows videos to work in deployed environments where
-      // the object storage sidecar is not available
-      const videoUrl = publicUrl || objectPath;
+      // Videos in the public directory are accessible without authentication
       const source = await storage.createVideoSource({
         name,
-        url: videoUrl,
+        url: publicUrl,
         isActive: true,
         settings: null,
       });

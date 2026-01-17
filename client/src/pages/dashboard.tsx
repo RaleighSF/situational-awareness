@@ -182,7 +182,7 @@ export default function Dashboard() {
         const error = await urlRes.json();
         throw new Error(error.error || "Failed to get upload URL");
       }
-      const { uploadURL, objectPath } = await urlRes.json();
+      const { uploadURL, publicUrl } = await urlRes.json();
       const uploadRes = await fetch(uploadURL, {
         method: "PUT",
         body: file,
@@ -194,7 +194,7 @@ export default function Dashboard() {
       const completeRes = await fetch("/api/video-sources/complete-upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, objectPath }),
+        body: JSON.stringify({ name, publicUrl }),
       });
       if (!completeRes.ok) {
         const error = await completeRes.json();
