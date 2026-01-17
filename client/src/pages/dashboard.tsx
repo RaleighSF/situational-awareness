@@ -510,7 +510,7 @@ export default function Dashboard() {
     const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1;
 
     setIsSceneAgentRunning(true);
-    setSceneAgentProgress(`Initializing Scene Agent...`);
+    setSceneAgentProgress(`Watching for ${durationSeconds} seconds...`);
     sceneAgentFramesRef.current = [];
 
     try {
@@ -527,7 +527,9 @@ export default function Dashboard() {
       }
 
       for (let i = 0; i < frameCount; i++) {
-        setSceneAgentProgress(`Capturing frame ${i + 1}/${frameCount}...`);
+        const secondsElapsed = i * intervalSeconds;
+        const secondsRemaining = durationSeconds - secondsElapsed;
+        setSceneAgentProgress(secondsRemaining > 0 ? `${secondsRemaining} seconds remaining...` : `Finishing observation...`);
         
         const frameData = videoPlayerRef.current?.captureFrame(currentBoundingBox);
         if (frameData) {
@@ -553,7 +555,7 @@ export default function Dashboard() {
         return;
       }
 
-      setSceneAgentProgress(`Analyzing ${sceneAgentFramesRef.current.length} frames with AI...`);
+      setSceneAgentProgress(`Processing observations...`);
 
       const response = await apiRequest("POST", "/api/scene-agent/run", {
         frames: sceneAgentFramesRef.current,
