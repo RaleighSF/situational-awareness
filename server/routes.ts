@@ -1,9 +1,43 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { storage } from "./storage";
 import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema, sceneAgentSynthesisSchema, sourceSettingsSchema } from "@shared/schema";
 import type { BoundingBox, FrameObservation, SceneAgentSynthesis, SceneAgentResult } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
+
+const UPLOADS_DIR = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+const videoStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, UPLOADS_DIR);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `video-${uniqueSuffix}${ext}`);
+  },
+});
+
+const videoUpload = multer({
+  storage: videoStorage,
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = ["video/mp4", "video/webm", "video/ogg", "video/quicktime"];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only MP4, WebM, OGG, and MOV videos are allowed."));
+    }
+  },
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB limit
+  },
+});
 
 const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT || "https://cosmos.agentdemos.com";
 
@@ -394,6 +428,47 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating video source settings:", error);
       res.status(500).json({ error: "Failed to update settings" });
+    }
+  });
+
+  app.post("/api/video-sources/upload", videoUpload.single("video"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No video file provided" });
+      }
+      const name = req.body.name || path.parse(req.file.originalname).name;
+      const videoUrl = `/uploads/${req.file.filename}`;
+      const source = await storage.createVideoSource({
+        name,
+        url: videoUrl,
+        isActive: true,
+        settings: null,
+      });
+      res.status(201).json(source);
+    } catch (error) {
+      console.error("Error uploading video:", error);
+      res.status(500).json({ error: "Failed to upload video" });
+    }
+  });
+
+  app.delete("/api/video-sources/:id", async (req, res) => {
+    try {
+      const source = await storage.getVideoSource(req.params.id);
+      if (!source) {
+        return res.status(404).json({ error: "Video source not found" });
+      }
+      await storage.deletePromptsByVideoSource(req.params.id);
+      if (source.url.startsWith("/uploads/")) {
+        const filePath = path.join(process.cwd(), source.url);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+      await storage.deleteVideoSource(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting video source:", error);
+      res.status(500).json({ error: "Failed to delete video source" });
     }
   });
 

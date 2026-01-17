@@ -32,6 +32,8 @@ import {
   ChevronDown,
   Bot,
   Settings,
+  Upload,
+  Trash2,
 } from "lucide-react";
 import { SiNvidia } from "react-icons/si";
 import {
@@ -151,6 +153,62 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/video-sources"] });
     },
   });
+
+  const uploadVideoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("video", file);
+      formData.append("name", file.name.replace(/\.[^/.]+$/, ""));
+      const res = await fetch("/api/video-sources/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Upload failed");
+      }
+      return res.json();
+    },
+    onSuccess: (newSource: VideoSource) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/video-sources"] });
+      setCurrentVideoSourceId(newSource.id);
+      toast({ title: "Video uploaded", description: `"${newSource.name}" is now available as a source.` });
+    },
+    onError: (error) => {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteSourceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/video-sources/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/video-sources"] });
+      if (videoSources.length > 1) {
+        const remainingSources = videoSources.filter(s => s.id !== currentVideoSourceId);
+        if (remainingSources.length > 0) {
+          setCurrentVideoSourceId(remainingSources[0].id);
+        }
+      }
+      toast({ title: "Video source deleted" });
+    },
+    onError: (error) => {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      uploadVideoMutation.mutate(file);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const saveSourceSettings = useCallback((settings: Partial<SourceSettings>) => {
     if (!currentVideoSourceId) return;
@@ -781,6 +839,46 @@ export default function Dashboard() {
                   ))}
                 </SelectContent>
               </Select>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                onChange={handleFileUpload}
+                className="hidden"
+                data-testid="input-video-upload"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadVideoMutation.isPending}
+                data-testid="button-upload-video"
+              >
+                {uploadVideoMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+              </Button>
+              {currentSource?.url.startsWith("/uploads/") && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    if (currentVideoSourceId) {
+                      deleteSourceMutation.mutate(currentVideoSourceId);
+                    }
+                  }}
+                  disabled={deleteSourceMutation.isPending}
+                  data-testid="button-delete-source"
+                >
+                  {deleteSourceMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
             </div>
 
             <div className="relative">

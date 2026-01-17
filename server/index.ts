@@ -8,6 +8,7 @@ const app = express();
 const httpServer = createServer(app);
 
 app.use("/attached_assets", express.static(path.join(process.cwd(), "attached_assets")));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 declare module "http" {
   interface IncomingMessage {
