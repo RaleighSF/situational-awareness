@@ -18,12 +18,12 @@ export function AnalysisStatus({
 }: AnalysisStatusProps) {
 
   return (
-    <Card>
+    <Card className={isAnalyzing ? "animate-glow-breathe-green border-green-500/30" : ""}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className={`relative ${isAnalyzing ? "animate-pulse" : ""}`}>
-              <Cpu className={`h-5 w-5 ${isAnalyzing ? "text-primary" : "text-muted-foreground"}`} />
+              <Cpu className={`h-5 w-5 ${isAnalyzing ? "text-green-500" : "text-muted-foreground"}`} />
               {isAnalyzing && (
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full" />
               )}
