@@ -272,4 +272,19 @@
       box-shadow: 0 0 20px 6px hsla(83, 100%, 36%, 0.5);
     }
   }
+
+  .animate-glow-breathe-green {
+    animation: glowBreatheGreen 2s ease-in-out infinite;
+  }
+
+  @keyframes glowBreatheGreen {
+    0%, 100% {
+      box-shadow: 0 0 10px 3px hsla(120, 100%, 40%, 0.4),
+                  0 0 20px 6px hsla(120, 100%, 40%, 0.2);
+    }
+    50% {
+      box-shadow: 0 0 25px 8px hsla(120, 100%, 45%, 0.6),
+                  0 0 40px 15px hsla(120, 100%, 45%, 0.3);
+    }
+  }
 }

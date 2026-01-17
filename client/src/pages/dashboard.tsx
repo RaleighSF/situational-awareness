@@ -650,6 +650,7 @@ export default function Dashboard() {
                 activeBoundingBox={currentBoundingBox}
                 isDrawingMode={isDrawingMode}
                 isAnalyzing={isAnalyzing}
+                isSceneAgentRunning={isSceneAgentRunning}
               />
               {isSceneAgentRunning && (
                 <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center rounded-lg" data-testid="scene-agent-overlay">

@@ -17,6 +17,7 @@ interface VideoPlayerProps {
   isDrawingMode?: boolean;
   onFrameCapture?: (frameData: string) => void;
   isAnalyzing?: boolean;
+  isSceneAgentRunning?: boolean;
 }
 
 export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
@@ -30,6 +31,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
       isDrawingMode = false,
       onFrameCapture,
       isAnalyzing = false,
+      isSceneAgentRunning = false,
     },
     ref
   ) {
@@ -180,7 +182,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
     };
 
     return (
-      <Card className={`transition-shadow duration-1000 ${isAnalyzing ? "animate-glow-breathe" : ""}`}>
+      <Card className={`transition-shadow duration-1000 ${isAnalyzing ? "animate-glow-breathe" : ""} ${isSceneAgentRunning ? "animate-glow-breathe-green" : ""}`}>
         <CardContent className="p-0 overflow-hidden">
           <div
             ref={containerRef}
