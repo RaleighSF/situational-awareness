@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertPromptSchema, insertAlertSchema } from "@shared/schema";
-import type { BoundingBox } from "@shared/schema";
+import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema } from "@shared/schema";
+import type { BoundingBox, FrameObservation, SceneAgentSynthesis, SceneAgentResult } from "@shared/schema";
+import { fromZodError } from "zod-validation-error";
 
 const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT || "https://cosmos.agentdemos.com";
 
@@ -107,6 +108,121 @@ Be concise but thorough. If you detect the specified condition, explain exactly 
       detected: false,
       analysis: `Analysis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       confidence: "LOW",
+    };
+  }
+}
+
+async function getSceneObservation(frameData: string): Promise<string> {
+  if (!frameData || frameData.length < 100) {
+    return "Invalid frame - could not analyze";
+  }
+
+  const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
+  const base64Data = dataUrlMatch 
+    ? frameData.slice(dataUrlMatch[0].length)
+    : frameData;
+
+  const prompt = `You are observing a security camera feed. Describe exactly what you see in this frame in a factual, structured way. Focus on:
+- People present (count, positions, activities)
+- Vehicles or equipment visible
+- Environmental conditions (lighting, weather if visible)
+- Any notable objects or items
+- Movement or actions occurring
+
+Be concise and factual. List your observations as bullet points.`;
+
+  const payload = {
+    image_b64: base64Data,
+    prompt: prompt,
+    max_new_tokens: 256,
+  };
+
+  try {
+    const response = await fetch(`${COSMOS_ENDPOINT}/infer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Cosmos API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result.text || "No observation generated";
+  } catch (error) {
+    console.error("Error getting scene observation:", error);
+    return `Observation failed: ${error instanceof Error ? error.message : "Unknown error"}`;
+  }
+}
+
+async function synthesizeObservations(observations: FrameObservation[]): Promise<SceneAgentSynthesis> {
+  const timeline = observations
+    .map(o => `[T+${o.timestampOffset}s] ${o.observation}`)
+    .join("\n\n");
+
+  const prompt = `You are analyzing a sequence of observations from a security camera taken over time. Here is the timeline of observations:
+
+${timeline}
+
+Based on this sequence, provide a temporal analysis in EXACTLY this JSON format:
+{
+  "changes": ["list of things that changed between frames"],
+  "persistent": ["list of things that stayed constant throughout"],
+  "anomalies": ["list of any unusual or noteworthy events"],
+  "narrative": "A brief 2-3 sentence summary of what happened during this time period"
+}
+
+Focus on temporal patterns - what evolved, what remained stable, and any notable events. Return ONLY the JSON object, no other text.`;
+
+  const payload = {
+    image_b64: "",
+    prompt: prompt,
+    max_new_tokens: 512,
+  };
+
+  try {
+    const response = await fetch(`${COSMOS_ENDPOINT}/infer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Cosmos API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    const text = result.text || "";
+    
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          changes: Array.isArray(parsed.changes) ? parsed.changes : [],
+          persistent: Array.isArray(parsed.persistent) ? parsed.persistent : [],
+          anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
+          narrative: typeof parsed.narrative === "string" ? parsed.narrative : "Analysis complete.",
+        };
+      } catch {
+        console.error("Failed to parse synthesis JSON:", text);
+      }
+    }
+
+    return {
+      changes: [],
+      persistent: [],
+      anomalies: [],
+      narrative: text || "Unable to generate synthesis from observations.",
+    };
+  } catch (error) {
+    console.error("Error synthesizing observations:", error);
+    return {
+      changes: [],
+      persistent: [],
+      anomalies: [],
+      narrative: `Synthesis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     };
   }
 }
@@ -301,6 +417,57 @@ export async function registerRoutes(
       timestamp: Date.now(),
       error: "Video capture required - please wait for video to load"
     });
+  });
+
+  app.post("/api/scene-agent/run", async (req, res) => {
+    try {
+      const parseResult = sceneAgentRequestSchema.safeParse(req.body);
+      
+      if (!parseResult.success) {
+        const errorMessage = fromZodError(parseResult.error).message;
+        console.log(`[Scene Agent] Validation failed: ${errorMessage}`);
+        return res.status(400).json({ error: errorMessage });
+      }
+      
+      const { frames, intervalSeconds, durationSeconds } = parseResult.data;
+
+      console.log(`[Scene Agent] Starting analysis of ${frames.length} frames over ${durationSeconds}s`);
+      const startTime = new Date().toISOString();
+
+      const observations: FrameObservation[] = [];
+      for (let i = 0; i < frames.length; i++) {
+        const timestampOffset = i * intervalSeconds;
+        console.log(`[Scene Agent] Analyzing frame ${i + 1}/${frames.length} at T+${timestampOffset}s`);
+        
+        const observation = await getSceneObservation(frames[i]);
+        observations.push({
+          index: i,
+          timestampOffset,
+          observation,
+        });
+      }
+
+      console.log(`[Scene Agent] Synthesizing ${observations.length} observations`);
+      const synthesis = await synthesizeObservations(observations);
+
+      const endTime = new Date().toISOString();
+
+      const result: SceneAgentResult = {
+        observations,
+        synthesis,
+        startTime,
+        endTime,
+        frameCount: frames.length,
+      };
+
+      console.log(`[Scene Agent] Analysis complete`);
+      res.json(result);
+    } catch (error) {
+      console.error("Scene Agent error:", error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : "Scene Agent analysis failed" 
+      });
+    }
   });
 
   app.get("/api/video/proxy", async (req, res) => {

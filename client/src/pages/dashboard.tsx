@@ -7,6 +7,7 @@ import { PromptForm } from "@/components/prompt-form";
 import { AlertList } from "@/components/alert-list";
 import { AlertDetailModal } from "@/components/alert-detail-modal";
 import { AnalysisStatus } from "@/components/analysis-status";
+import { SceneAgentModal } from "@/components/scene-agent-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,6 +31,7 @@ import {
   XCircle,
   Loader2,
   ChevronDown,
+  Clock,
 } from "lucide-react";
 import {
   Select,
@@ -38,7 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Prompt, Alert, BoundingBox } from "@shared/schema";
+import type { Prompt, Alert, BoundingBox, SceneAgentResult } from "@shared/schema";
 
 const VIDEO_SOURCES = [
   {
@@ -98,6 +100,12 @@ export default function Dashboard() {
   } | null>(null);
   const [isTestLoading, setIsTestLoading] = useState(false);
   const activePromptsRef = useRef<string>("");
+  
+  const [isSceneAgentRunning, setIsSceneAgentRunning] = useState(false);
+  const [sceneAgentProgress, setSceneAgentProgress] = useState("");
+  const [sceneAgentResult, setSceneAgentResult] = useState<SceneAgentResult | null>(null);
+  const [isSceneAgentModalOpen, setIsSceneAgentModalOpen] = useState(false);
+  const sceneAgentFramesRef = useRef<string[]>([]);
 
   const { data: prompts = [], isLoading: promptsLoading } = useQuery<Prompt[]>({
     queryKey: ["/api/prompts"],
@@ -496,6 +504,88 @@ export default function Dashboard() {
     }
   };
 
+  const startSceneAgent = async () => {
+    const durationSeconds = 30;
+    const intervalSeconds = 5;
+    const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1;
+
+    setIsSceneAgentRunning(true);
+    setSceneAgentProgress(`Initializing Scene Agent...`);
+    sceneAgentFramesRef.current = [];
+
+    try {
+      const initialFrame = videoPlayerRef.current?.captureFrame(null);
+      if (!initialFrame) {
+        toast({
+          title: "Video not ready",
+          description: "Please wait for the video to load before starting Scene Agent.",
+          variant: "destructive",
+        });
+        setIsSceneAgentRunning(false);
+        setSceneAgentProgress("");
+        return;
+      }
+
+      for (let i = 0; i < frameCount; i++) {
+        setSceneAgentProgress(`Capturing frame ${i + 1}/${frameCount}...`);
+        
+        const frameData = videoPlayerRef.current?.captureFrame(currentBoundingBox);
+        if (frameData) {
+          sceneAgentFramesRef.current.push(frameData);
+          console.log(`[Scene Agent] Captured frame ${i + 1}/${frameCount}, size: ${Math.round(frameData.length / 1024)}KB`);
+        } else {
+          console.log(`[Scene Agent] Frame ${i + 1}/${frameCount} capture failed - video not ready`);
+        }
+
+        if (i < frameCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+        }
+      }
+
+      if (sceneAgentFramesRef.current.length === 0) {
+        toast({
+          title: "No frames captured",
+          description: "Could not capture any frames. Please ensure video is playing.",
+          variant: "destructive",
+        });
+        setIsSceneAgentRunning(false);
+        setSceneAgentProgress("");
+        return;
+      }
+
+      setSceneAgentProgress(`Analyzing ${sceneAgentFramesRef.current.length} frames with AI...`);
+
+      const response = await apiRequest("POST", "/api/scene-agent/run", {
+        frames: sceneAgentFramesRef.current,
+        intervalSeconds,
+        durationSeconds,
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || "Scene Agent analysis failed");
+      }
+      
+      setSceneAgentResult(result);
+      setIsSceneAgentModalOpen(true);
+      
+      toast({
+        title: "Scene Agent Complete",
+        description: "Temporal analysis is ready to view.",
+      });
+    } catch (error) {
+      toast({
+        title: "Scene Agent Failed",
+        description: error instanceof Error ? error.message : "Analysis failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSceneAgentRunning(false);
+      setSceneAgentProgress("");
+    }
+  };
+
   const alertPrompt = selectedAlert
     ? prompts.find((p) => p.id === selectedAlert.promptId) ?? null
     : null;
@@ -536,15 +626,31 @@ export default function Dashboard() {
                 <Eye className="h-5 w-5 text-muted-foreground" />
                 <h2 className="text-lg font-medium">Video Monitor</h2>
               </div>
-              <Button
-                variant={isDrawingMode ? "default" : "outline"}
-                size="sm"
-                onClick={() => setIsDrawingMode(!isDrawingMode)}
-                data-testid="button-toggle-drawing"
-              >
-                <Crosshair className="h-4 w-4 mr-2" />
-                {isDrawingMode ? "Drawing Region" : "Draw Region"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={isDrawingMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setIsDrawingMode(!isDrawingMode)}
+                  data-testid="button-toggle-drawing"
+                >
+                  <Crosshair className="h-4 w-4 mr-2" />
+                  {isDrawingMode ? "Drawing Region" : "Draw Region"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={startSceneAgent}
+                  disabled={isSceneAgentRunning}
+                  data-testid="button-scene-agent"
+                >
+                  {isSceneAgentRunning ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Clock className="h-4 w-4 mr-2" />
+                  )}
+                  {isSceneAgentRunning ? "Monitoring..." : "Scene Agent"}
+                </Button>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 mb-2">
@@ -563,15 +669,24 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            <VideoPlayer
-              ref={videoPlayerRef}
-              videoUrl={getVideoUrl(currentVideoSource)}
-              isPlaying={isPlaying}
-              onPlayPause={() => setIsPlaying(!isPlaying)}
-              onBoundingBoxChange={setCurrentBoundingBox}
-              activeBoundingBox={currentBoundingBox}
-              isDrawingMode={isDrawingMode}
-            />
+            <div className="relative">
+              <VideoPlayer
+                ref={videoPlayerRef}
+                videoUrl={getVideoUrl(currentVideoSource)}
+                isPlaying={isPlaying}
+                onPlayPause={() => setIsPlaying(!isPlaying)}
+                onBoundingBoxChange={setCurrentBoundingBox}
+                activeBoundingBox={currentBoundingBox}
+                isDrawingMode={isDrawingMode}
+              />
+              {isSceneAgentRunning && (
+                <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center rounded-lg" data-testid="scene-agent-overlay">
+                  <Loader2 className="h-12 w-12 text-white animate-spin mb-4" />
+                  <p className="text-white text-lg font-medium">Monitoring the situation...</p>
+                  <p className="text-white/70 text-sm mt-2">{sceneAgentProgress}</p>
+                </div>
+              )}
+            </div>
 
             <AnalysisStatus
               isAnalyzing={isAnalyzing}
@@ -769,6 +884,12 @@ export default function Dashboard() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <SceneAgentModal
+        open={isSceneAgentModalOpen}
+        onOpenChange={setIsSceneAgentModalOpen}
+        result={sceneAgentResult}
+      />
     </div>
   );
 }

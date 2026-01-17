@@ -73,3 +73,41 @@ export type InsertAlert = z.infer<typeof insertAlertSchema>;
 export type VideoSource = typeof videoSources.$inferSelect;
 export type Prompt = typeof prompts.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
+
+export const sceneAgentConfigSchema = z.object({
+  durationSeconds: z.number().min(10).max(120).default(30),
+  intervalSeconds: z.number().min(5).max(30).default(5),
+  boundingBox: z.union([boundingBoxSchema, z.null()]).optional(),
+});
+
+export const sceneAgentRequestSchema = z.object({
+  frames: z.array(z.string()).min(1, "At least one frame is required"),
+  intervalSeconds: z.number().min(5).max(30).default(5),
+  durationSeconds: z.number().min(10).max(120).default(30),
+});
+
+export const frameObservationSchema = z.object({
+  index: z.number(),
+  timestampOffset: z.number(),
+  observation: z.string(),
+});
+
+export const sceneAgentSynthesisSchema = z.object({
+  changes: z.array(z.string()),
+  persistent: z.array(z.string()),
+  anomalies: z.array(z.string()),
+  narrative: z.string(),
+});
+
+export const sceneAgentResultSchema = z.object({
+  observations: z.array(frameObservationSchema),
+  synthesis: sceneAgentSynthesisSchema,
+  startTime: z.string(),
+  endTime: z.string(),
+  frameCount: z.number(),
+});
+
+export type SceneAgentConfig = z.infer<typeof sceneAgentConfigSchema>;
+export type FrameObservation = z.infer<typeof frameObservationSchema>;
+export type SceneAgentSynthesis = z.infer<typeof sceneAgentSynthesisSchema>;
+export type SceneAgentResult = z.infer<typeof sceneAgentResultSchema>;
