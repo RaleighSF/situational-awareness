@@ -657,7 +657,7 @@ export default function Dashboard() {
                     </Card>
                   ) : (
                     <div className="space-y-3">
-                      {prompts.map((prompt) => (
+                      {[...prompts].sort((a, b) => Number(b.isActive) - Number(a.isActive)).map((prompt) => (
                         <PromptCard
                           key={prompt.id}
                           prompt={prompt}
