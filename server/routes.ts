@@ -177,7 +177,7 @@ Output ONLY valid JSON matching this schema.`;
   const payload = {
     prompt,
     observations: observationsPayload,
-    max_new_tokens: 400,
+    max_new_tokens: 512,
   };
 
   try {
