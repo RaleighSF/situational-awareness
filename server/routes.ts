@@ -163,16 +163,19 @@ async function synthesizeObservations(observations: FrameObservation[]): Promise
     confidence: o.confidence,
   }));
 
-  const prompt = `Analyze this security footage sequence. Provide a JSON response with:
-- summary: A concise 1-2 sentence overview of the scene
-- changes: List of things that changed during the observation window
-- persistent: List of things that remained constant throughout
-- events: Array of time-indexed events [{t: seconds, description: "what happened", type?: "movement|arrival|departure|activity"}]
-- anomalies: List of unusual or noteworthy observations (empty if none)
-- escalations: List of items requiring immediate attention (empty if none)
-- confidence: "HIGH", "MEDIUM", or "LOW"
+  const prompt = `Analyze this security footage sequence. You MUST respond with valid JSON containing ALL of these fields:
 
-Output ONLY valid JSON matching this schema.`;
+{
+  "summary": "Detailed 2-3 sentence overview describing key activities and scene context",
+  "changes": ["item that changed or moved", "another change observed"],
+  "persistent": ["element that remained constant", "another persistent element"],
+  "events": [{"t": 0, "description": "what happened at this timestamp"}],
+  "anomalies": ["unusual observation if any"],
+  "escalations": ["urgent items requiring attention if any"],
+  "confidence": "HIGH"
+}
+
+IMPORTANT: The "changes" array must list things that changed/moved during the sequence. The "persistent" array must list things that stayed constant throughout. Both arrays are REQUIRED even if empty.`;
 
   const payload = {
     prompt,
