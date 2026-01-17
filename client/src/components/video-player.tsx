@@ -16,6 +16,7 @@ interface VideoPlayerProps {
   activeBoundingBox?: BoundingBox | null;
   isDrawingMode?: boolean;
   onFrameCapture?: (frameData: string) => void;
+  isAnalyzing?: boolean;
 }
 
 export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
@@ -28,6 +29,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
       activeBoundingBox,
       isDrawingMode = false,
       onFrameCapture,
+      isAnalyzing = false,
     },
     ref
   ) {
@@ -178,7 +180,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
     };
 
     return (
-      <Card className="overflow-hidden">
+      <Card className={`overflow-hidden transition-shadow duration-1000 ${isAnalyzing ? "animate-glow-breathe" : ""}`}>
         <CardContent className="p-0">
           <div
             ref={containerRef}

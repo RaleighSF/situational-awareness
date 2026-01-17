@@ -1,15 +1,12 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Play, Pause, Activity, Cpu, Eye, Clock } from "lucide-react";
 
 interface AnalysisStatusProps {
   isAnalyzing: boolean;
   activePromptCount: number;
   lastAnalysisTime: Date | null;
-  nextAnalysisIn: number | null;
-  minFrequency: number;
   onToggleAnalysis: () => void;
 }
 
@@ -17,13 +14,8 @@ export function AnalysisStatus({
   isAnalyzing,
   activePromptCount,
   lastAnalysisTime,
-  nextAnalysisIn,
-  minFrequency,
   onToggleAnalysis,
 }: AnalysisStatusProps) {
-  const progressPercent = nextAnalysisIn !== null && minFrequency > 0
-    ? Math.max(0, 100 - (nextAnalysisIn / minFrequency) * 100)
-    : 0;
 
   return (
     <Card>
@@ -62,16 +54,6 @@ export function AnalysisStatus({
             )}
           </Button>
         </div>
-
-        {isAnalyzing && nextAnalysisIn !== null && activePromptCount === 1 && (
-          <div className="space-y-2 mb-4">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Next analysis</span>
-              <span className="font-mono">{nextAnalysisIn}s</span>
-            </div>
-            <Progress value={progressPercent} className="h-1" />
-          </div>
-        )}
 
         <div className="grid grid-cols-3 gap-3">
           <div className="flex flex-col items-center p-2 rounded-md bg-muted/50">

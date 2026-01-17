@@ -85,7 +85,6 @@ export default function Dashboard() {
   const [isAlertDetailOpen, setIsAlertDetailOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [lastAnalysisTime, setLastAnalysisTime] = useState<Date | null>(null);
-  const [nextAnalysisIn, setNextAnalysisIn] = useState<number | null>(null);
   const promptSchedulesRef = useRef<Map<string, PromptSchedule>>(new Map());
   const cachedFrameRef = useRef<{ data: string; timestamp: number } | null>(null);
   const FRAME_CACHE_TTL_MS = 500;
@@ -321,15 +320,10 @@ export default function Dashboard() {
 
     activePromptsRef.current = JSON.stringify(activePrompts.map(p => ({ id: p.id, freq: p.frequencySeconds })));
 
-    if (activePrompts.length > 0) {
-      const minFrequency = Math.min(...activePrompts.map((p) => p.frequencySeconds));
-      setNextAnalysisIn(minFrequency);
-    }
   }, [activePrompts, toast, clearAllSchedules, schedulePrompt]);
 
   const stopAnalysis = useCallback(() => {
     setIsAnalyzing(false);
-    setNextAnalysisIn(null);
     clearAllSchedules();
   }, [clearAllSchedules]);
 
@@ -370,33 +364,6 @@ export default function Dashboard() {
       });
     }
   }, [activePrompts, isAnalyzing, stopAnalysis, schedulePrompt, toast]);
-
-  useEffect(() => {
-    if (!isAnalyzing || activePrompts.length === 0) return;
-
-    const updateCountdown = () => {
-      const now = Date.now();
-      const schedules = promptSchedulesRef.current;
-      let minSecondsUntilNext = Infinity;
-
-      activePrompts.forEach((prompt) => {
-        const schedule = schedules.get(prompt.id);
-        if (schedule) {
-          const secondsUntilNext = Math.max(0, Math.ceil((schedule.nextRunAt - now) / 1000));
-          if (secondsUntilNext < minSecondsUntilNext) {
-            minSecondsUntilNext = secondsUntilNext;
-          }
-        }
-      });
-
-      setNextAnalysisIn(minSecondsUntilNext === Infinity ? null : minSecondsUntilNext);
-    };
-
-    const countdownInterval = setInterval(updateCountdown, 1000);
-    updateCountdown();
-
-    return () => clearInterval(countdownInterval);
-  }, [isAnalyzing, activePrompts]);
 
   useEffect(() => {
     return () => {
@@ -682,6 +649,7 @@ export default function Dashboard() {
                 onBoundingBoxChange={setCurrentBoundingBox}
                 activeBoundingBox={currentBoundingBox}
                 isDrawingMode={isDrawingMode}
+                isAnalyzing={isAnalyzing}
               />
               {isSceneAgentRunning && (
                 <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center rounded-lg" data-testid="scene-agent-overlay">
@@ -696,10 +664,6 @@ export default function Dashboard() {
               isAnalyzing={isAnalyzing}
               activePromptCount={activePrompts.length}
               lastAnalysisTime={lastAnalysisTime}
-              nextAnalysisIn={nextAnalysisIn}
-              minFrequency={activePrompts.length > 0 
-                ? Math.min(...activePrompts.map(p => p.frequencySeconds)) 
-                : 60}
               onToggleAnalysis={() => {
                 if (isAnalyzing) {
                   stopAnalysis();

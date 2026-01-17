@@ -259,4 +259,17 @@
   .bounding-box-handle {
     @apply absolute w-3 h-3 bg-primary rounded-full border-2 border-white cursor-pointer;
   }
+
+  .animate-glow-breathe {
+    animation: glowBreathe 3s ease-in-out infinite;
+  }
+
+  @keyframes glowBreathe {
+    0%, 100% {
+      box-shadow: 0 0 8px 2px hsla(83, 100%, 36%, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 20px 6px hsla(83, 100%, 36%, 0.5);
+    }
+  }
 }
