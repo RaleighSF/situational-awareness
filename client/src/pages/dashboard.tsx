@@ -102,6 +102,8 @@ export default function Dashboard() {
   
   const [isSceneAgentRunning, setIsSceneAgentRunning] = useState(false);
   const [sceneAgentProgress, setSceneAgentProgress] = useState("");
+  const [sceneAgentPhase, setSceneAgentPhase] = useState<"recording" | "analyzing" | null>(null);
+  const [sceneAgentElapsed, setSceneAgentElapsed] = useState(0);
   const [sceneAgentResult, setSceneAgentResult] = useState<SceneAgentResult | null>(null);
   const [isSceneAgentModalOpen, setIsSceneAgentModalOpen] = useState(false);
   const sceneAgentFramesRef = useRef<string[]>([]);
@@ -475,9 +477,13 @@ export default function Dashboard() {
     const durationSeconds = 20;
     const intervalSeconds = 4;
     const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1;
+    
+    const VISUAL_RECORDING_DURATION = 60;
+    const VISUAL_ANALYZING_DURATION = 12;
 
     setIsSceneAgentRunning(true);
-    setSceneAgentProgress(`Watching for ${durationSeconds} seconds...`);
+    setSceneAgentPhase("recording");
+    setSceneAgentElapsed(0);
     sceneAgentFramesRef.current = [];
 
     try {
@@ -489,27 +495,51 @@ export default function Dashboard() {
           variant: "destructive",
         });
         setIsSceneAgentRunning(false);
+        setSceneAgentPhase(null);
         setSceneAgentProgress("");
         return;
       }
 
-      for (let i = 0; i < frameCount; i++) {
-        const secondsElapsed = i * intervalSeconds;
-        const secondsRemaining = durationSeconds - secondsElapsed;
-        setSceneAgentProgress(secondsRemaining > 0 ? `${secondsRemaining} seconds remaining...` : `Finishing observation...`);
-        
-        const frameData = videoPlayerRef.current?.captureFrame(currentBoundingBox);
-        if (frameData) {
-          sceneAgentFramesRef.current.push(frameData);
-          console.log(`[Scene Agent] Captured frame ${i + 1}/${frameCount}, size: ${Math.round(frameData.length / 1024)}KB`);
-        } else {
-          console.log(`[Scene Agent] Frame ${i + 1}/${frameCount} capture failed - video not ready`);
-        }
+      const recordingStartTime = Date.now();
+      let apiPromise: Promise<Response> | null = null;
+      let framesReady = false;
 
-        if (i < frameCount - 1) {
-          await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+      const captureFrames = async () => {
+        for (let i = 0; i < frameCount; i++) {
+          const frameData = videoPlayerRef.current?.captureFrame(currentBoundingBox);
+          if (frameData) {
+            sceneAgentFramesRef.current.push(frameData);
+            console.log(`[Scene Agent] Captured frame ${i + 1}/${frameCount}, size: ${Math.round(frameData.length / 1024)}KB`);
+          } else {
+            console.log(`[Scene Agent] Frame ${i + 1}/${frameCount} capture failed - video not ready`);
+          }
+
+          if (i < frameCount - 1) {
+            await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+          }
         }
-      }
+        framesReady = true;
+        
+        if (sceneAgentFramesRef.current.length > 0) {
+          apiPromise = apiRequest("POST", "/api/scene-agent/run", {
+            frames: sceneAgentFramesRef.current,
+            intervalSeconds,
+            durationSeconds,
+          });
+        }
+      };
+
+      captureFrames();
+
+      const updateElapsed = () => {
+        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+        setSceneAgentElapsed(Math.min(elapsed, VISUAL_RECORDING_DURATION));
+      };
+      
+      const elapsedInterval = setInterval(updateElapsed, 1000);
+
+      await new Promise(resolve => setTimeout(resolve, VISUAL_RECORDING_DURATION * 1000));
+      clearInterval(elapsedInterval);
 
       if (sceneAgentFramesRef.current.length === 0) {
         toast({
@@ -518,17 +548,30 @@ export default function Dashboard() {
           variant: "destructive",
         });
         setIsSceneAgentRunning(false);
+        setSceneAgentPhase(null);
         setSceneAgentProgress("");
         return;
       }
 
-      setSceneAgentProgress(`Processing observations...`);
+      setSceneAgentPhase("analyzing");
+      setSceneAgentElapsed(0);
+      
+      const analyzingStartTime = Date.now();
+      const analyzingInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - analyzingStartTime) / 1000);
+        setSceneAgentElapsed(Math.min(elapsed, VISUAL_ANALYZING_DURATION));
+      }, 1000);
 
-      const response = await apiRequest("POST", "/api/scene-agent/run", {
-        frames: sceneAgentFramesRef.current,
-        intervalSeconds,
-        durationSeconds,
-      });
+      if (!apiPromise) {
+        apiPromise = apiRequest("POST", "/api/scene-agent/run", {
+          frames: sceneAgentFramesRef.current,
+          intervalSeconds,
+          durationSeconds,
+        });
+      }
+
+      const response = await apiPromise;
+      clearInterval(analyzingInterval);
 
       const result = await response.json();
       
@@ -551,6 +594,7 @@ export default function Dashboard() {
       });
     } finally {
       setIsSceneAgentRunning(false);
+      setSceneAgentPhase(null);
       setSceneAgentProgress("");
     }
   };
@@ -654,8 +698,29 @@ export default function Dashboard() {
               />
               {isSceneAgentRunning && (
                 <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center rounded-lg" data-testid="scene-agent-overlay">
-                  <Loader2 className="h-12 w-12 text-white animate-spin mb-4" />
-                  <p className="text-white text-lg font-medium">Monitoring the situation...</p>
+                  {sceneAgentPhase === "recording" ? (
+                    <>
+                      <div className="relative mb-4">
+                        <div className="h-16 w-16 rounded-full border-4 border-red-500 flex items-center justify-center animate-pulse">
+                          <div className="h-4 w-4 rounded-full bg-red-500" />
+                        </div>
+                      </div>
+                      <p className="text-white text-lg font-medium mb-2">Recording Scene</p>
+                      <p className="text-white/80 text-2xl font-mono">{sceneAgentElapsed}s / 60s</p>
+                      <p className="text-white/60 text-sm mt-2">Capturing temporal data...</p>
+                    </>
+                  ) : sceneAgentPhase === "analyzing" ? (
+                    <>
+                      <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
+                      <p className="text-white text-lg font-medium mb-2">Analyzing Footage</p>
+                      <p className="text-white/80 text-sm">AI is synthesizing observations...</p>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="h-12 w-12 text-white animate-spin mb-4" />
+                      <p className="text-white text-lg font-medium">Monitoring the situation...</p>
+                    </>
+                  )}
                 </div>
               )}
             </div>
