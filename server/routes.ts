@@ -40,6 +40,92 @@ const videoUpload = multer({
 });
 
 const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT || "https://cosmos.agentdemos.com";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+type QuestionType = "precision" | "situational";
+
+function classifyPrompt(userPrompt: string): QuestionType {
+  const precisionKeywords = [
+    "count", "how many", "number of", "quantity", "total",
+    "exactly", "precise", "measure", "dimension", "size",
+    "height", "width", "length", "distance", "percentage",
+    "ratio", "amount", "sum", "tally", "enumerate"
+  ];
+  
+  const lowerPrompt = userPrompt.toLowerCase();
+  
+  for (const keyword of precisionKeywords) {
+    if (lowerPrompt.includes(keyword)) {
+      console.log(`[ROUTER] Classified as PRECISION (matched: "${keyword}")`);
+      return "precision";
+    }
+  }
+  
+  console.log("[ROUTER] Classified as SITUATIONAL (no precision keywords found)");
+  return "situational";
+}
+
+async function analyzeWithGPT4o(frameData: string, userPrompt: string): Promise<string> {
+  if (!OPENAI_API_KEY) {
+    throw new Error("OpenAI API key not configured");
+  }
+
+  const payload = {
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content: `You are a precision visual analysis assistant. Your specialty is accurate counting and measurement of objects in images. 
+
+IMPORTANT RULES:
+- Only count objects that are CLEARLY and FULLY visible
+- Do not estimate or guess about partially hidden objects
+- If objects are stacked or occluded, only count what you can definitively see
+- Be conservative in your counts - accuracy is more important than completeness
+- State your confidence level and any limitations in your answer`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: userPrompt
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: frameData,
+              detail: "high"
+            }
+          }
+        ]
+      }
+    ],
+    max_tokens: 1024
+  };
+
+  console.log("[GPT-4o] --> Sending precision analysis request");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${OPENAI_API_KEY}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("[GPT-4o] Error:", errorText);
+    throw new Error(`OpenAI API error: ${response.status}`);
+  }
+
+  const result = await response.json();
+  const content = result.choices?.[0]?.message?.content || "";
+  console.log(`[GPT-4o] <-- Response: ${content.length} chars`);
+  return content;
+}
 
 interface CosmosROI {
   x: number;
@@ -146,11 +232,7 @@ Be concise but thorough. If you detect the specified condition, explain exactly 
   }
 }
 
-async function analyzeWithCosmosAdhoc(frameData: string, userPrompt: string): Promise<string> {
-  if (!frameData || frameData.length < 100) {
-    return "Invalid frame captured - video may not be loaded";
-  }
-
+async function analyzeWithCosmosAdhocDirect(frameData: string, userPrompt: string): Promise<string> {
   const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
   const base64Data = dataUrlMatch 
     ? frameData.slice(dataUrlMatch[0].length)
@@ -169,28 +251,47 @@ Please provide a clear, accurate, and helpful response based on what you observe
   };
 
   const targetUrl = `${COSMOS_ENDPOINT}/infer`;
-  console.log(`[ADHOC] --> ${targetUrl}`);
+  console.log(`[COSMOS] --> ${targetUrl}`);
 
-  try {
-    const response = await fetch(targetUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+  const response = await fetch(targetUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Cosmos API error: ${response.status} - ${errorText}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Cosmos API error: ${response.status} - ${errorText}`);
+  }
+
+  const apiResult = await response.json();
+  console.log(`[COSMOS] <-- API result keys: ${Object.keys(apiResult).join(', ')}`);
+  const content = apiResult.text || apiResult.raw_text || apiResult.result || "";
+  console.log(`[COSMOS] <-- Response: ${content.length} chars`);
+  return content;
+}
+
+async function analyzeWithCosmosAdhoc(frameData: string, userPrompt: string): Promise<{ result: string; model: string }> {
+  if (!frameData || frameData.length < 100) {
+    return { result: "Invalid frame captured - video may not be loaded", model: "none" };
+  }
+
+  const questionType = classifyPrompt(userPrompt);
+  
+  if (questionType === "precision" && OPENAI_API_KEY) {
+    try {
+      console.log("[ROUTER] Routing to GPT-4o for precision analysis");
+      const result = await analyzeWithGPT4o(frameData, userPrompt);
+      return { result, model: "gpt-4o" };
+    } catch (error) {
+      console.error("[ROUTER] GPT-4o failed, falling back to Cosmos:", error);
+      const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt);
+      return { result, model: "cosmos-reason2" };
     }
-
-    const apiResult = await response.json();
-    console.log(`[ADHOC] <-- API result keys: ${Object.keys(apiResult).join(', ')}`);
-    const content = apiResult.text || apiResult.raw_text || apiResult.result || "";
-    console.log(`[ADHOC] <-- Response: ${content.length} chars`);
-    return content;
-  } catch (error) {
-    console.error("Error in ad-hoc Cosmos analysis:", error);
-    throw error;
+  } else {
+    console.log("[ROUTER] Routing to Cosmos-Reason2 for situational analysis");
+    const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt);
+    return { result, model: "cosmos-reason2" };
   }
 }
 
@@ -675,8 +776,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: "frameData and prompt are required" });
       }
 
-      const result = await analyzeWithCosmosAdhoc(frameData, prompt.trim());
-      res.json({ analysis: result });
+      const { result, model } = await analyzeWithCosmosAdhoc(frameData, prompt.trim());
+      res.json({ analysis: result, model });
     } catch (error) {
       console.error("Error in ad-hoc analysis:", error);
       res.status(500).json({ error: "Failed to analyze frame" });
