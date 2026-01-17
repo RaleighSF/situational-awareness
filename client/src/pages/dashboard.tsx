@@ -633,6 +633,7 @@ export default function Dashboard() {
                   variant={isDrawingMode ? "default" : "outline"}
                   size="sm"
                   onClick={() => setIsDrawingMode(!isDrawingMode)}
+                  className={isDrawingMode ? "" : "text-primary"}
                   data-testid="button-toggle-drawing"
                 >
                   <Crosshair className="h-4 w-4 mr-2" />
@@ -643,6 +644,7 @@ export default function Dashboard() {
                   size="sm"
                   onClick={startSceneAgent}
                   disabled={isSceneAgentRunning}
+                  className="text-primary"
                   data-testid="button-scene-agent"
                 >
                   {isSceneAgentRunning ? (
