@@ -6,7 +6,12 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.7 (Current)
+### v1.8 (Current)
+- Upload/delete buttons hidden in production mode
+- Videos should be uploaded in Development, then published
+- All video data (sources, prompts, alerts, settings) persists in database across deployments
+
+### v1.7
 - Production fix: Reverted to local file storage for video uploads
 - Videos now upload via multipart/form-data to /api/video-sources/upload (multer-based)
 - Removed broken Object Storage entries from database

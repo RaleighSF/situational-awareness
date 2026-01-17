@@ -889,45 +889,49 @@ export default function Dashboard() {
                   ))}
                 </SelectContent>
               </Select>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/mp4,video/webm,video/ogg,video/quicktime"
-                onChange={handleFileSelect}
-                className="hidden"
-                data-testid="input-video-upload"
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadVideoMutation.isPending}
-                data-testid="button-upload-video"
-              >
-                {uploadVideoMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4" />
-                )}
-              </Button>
-              {currentSource && !currentSource.url.startsWith("/attached_assets/") && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    if (currentVideoSourceId) {
-                      deleteSourceMutation.mutate(currentVideoSourceId);
-                    }
-                  }}
-                  disabled={deleteSourceMutation.isPending}
-                  data-testid="button-delete-source"
-                >
-                  {deleteSourceMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
+              {!import.meta.env.PROD && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    data-testid="input-video-upload"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadVideoMutation.isPending}
+                    data-testid="button-upload-video"
+                  >
+                    {uploadVideoMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                  </Button>
+                  {currentSource && !currentSource.url.startsWith("/attached_assets/") && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        if (currentVideoSourceId) {
+                          deleteSourceMutation.mutate(currentVideoSourceId);
+                        }
+                      }}
+                      disabled={deleteSourceMutation.isPending}
+                      data-testid="button-delete-source"
+                    >
+                      {deleteSourceMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
                   )}
-                </Button>
+                </>
               )}
             </div>
 
