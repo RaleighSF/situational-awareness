@@ -173,8 +173,6 @@ export default function Dashboard() {
 
   const uploadVideoMutation = useMutation({
     mutationFn: async ({ file, name }: { file: File; name: string }) => {
-      // Use local file upload (multer) instead of Object Storage
-      // This ensures videos work in both development and production
       const formData = new FormData();
       formData.append("video", file);
       formData.append("name", name);
@@ -185,11 +183,19 @@ export default function Dashboard() {
       });
       
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to upload video");
+        let errorMessage = "Failed to upload video";
+        try {
+          const error = await res.json();
+          errorMessage = error.error || errorMessage;
+        } catch {
+          const text = await res.text();
+          if (text) errorMessage = text;
+        }
+        throw new Error(errorMessage);
       }
       
-      return res.json();
+      const data = await res.json();
+      return data as VideoSource;
     },
     onSuccess: (newSource: VideoSource) => {
       queryClient.invalidateQueries({ queryKey: ["/api/video-sources"] });
