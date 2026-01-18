@@ -6,7 +6,15 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v2.1 (Current)
+### v2.2 (Current)
+- **Cosmos API v2 integration**: Client now sends `mode: "detect"` or `mode: "qa"` to server
+- Detection rules: Server handles prompt templating, client sends raw condition
+- Ad-hoc analysis: Uses `mode: "qa"` for expert visual analyst responses
+- Scene Agent `/reason`: Expects JSON response with timeline, changes, anomalies, escalation fields
+- Parsing improvements: Converts server's `timeline[].event` → `events[].description`, filters "None" values
+- Schema update: Added `changes` array to synthesis output
+
+### v2.1
 - **Cosmos API update**: Prompts simplified to pure user instructions (no JSON enforcement)
 - Response parsing: Strip chat wrapper tokens (user/assistant markers) from API responses
 - Scene Agent: Parse new section headers format (Summary, Notable Changes, Timeline, Anomalies, Confidence)

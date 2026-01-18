@@ -1,0 +1,425 @@
+# app.py
+# Cosmos Reason2 FastAPI service (updated prompt templates + safer, cleaner outputs)
+#
+# Endpoints:
+#   GET  /health
+#   POST /infer        (single frame)   -> supports detection rules + ad-hoc Q&A via `mode`
+#   POST /infer_batch  (multi frame)    -> short per-frame observations for Scene Agent
+#   POST /reason       (text-only)      -> temporal synthesis over observations
+#
+# Backwards compatibility:
+# - Existing callers that send: {image_b64, prompt, max_new_tokens, max_image_side}
+#   will still work.
+# - If you want the new detection behavior, set: mode="detect"
+#   For ad-hoc Q&A, set: mode="qa" (default if not specified).
+#
+# Env:
+#   export HF_TOKEN="..."   (or set in systemd unit)
+#   optional: MODEL_ID="nvidia/Cosmos-Reason2-8B"
+
+import os
+import io
+import re
+import time
+import base64
+import traceback
+from typing import Any, Dict, List, Optional, Literal
+
+import torch
+from PIL import Image
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+
+from transformers import AutoProcessor, AutoModelForVision2Seq
+
+
+# -----------------------------
+# Config
+# -----------------------------
+DEFAULT_MODEL_ID = os.getenv("MODEL_ID", "nvidia/Cosmos-Reason2-8B")
+HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+
+# Generation defaults (keep conservative; Replit can override per-call)
+DEFAULT_MAX_NEW_TOKENS_INFER = 192
+DEFAULT_MAX_NEW_TOKENS_REASON = 512
+
+# If you want to reduce echo risk further, keep these short
+DETECTION_ANALYSIS_SENTENCES = "2-3"
+QA_ANALYSIS_SENTENCES = "2-4"
+BATCH_OBS_SENTENCES = "2-3"
+
+
+# -----------------------------
+# Prompt templates (UPDATED)
+# -----------------------------
+def prompt_infer_detection(user_condition: str) -> str:
+    # Recommended #1: /infer detection rules
+    # Keep it short, authoritative, and action-oriented; avoid meta text.
+    return (
+        "You are a security operations analyst monitoring live surveillance.\n"
+        f"TASK: Evaluate if this condition is present: \"{user_condition}\".\n"
+        "Examine the image carefully. Report in this exact format:\n"
+        "DETECTED: YES or NO\n"
+        "CONFIDENCE: HIGH | MEDIUM | LOW\n"
+        f"ANALYSIS: {DETECTION_ANALYSIS_SENTENCES} sentences explaining what you see, why the condition is or isn't met, "
+        "and recommended action if detected.\n"
+        "Be direct. Do not include extra labels, disclaimers, or metadata."
+    )
+
+
+def prompt_infer_qa(user_question: str) -> str:
+    # Recommended #2: /infer ad-hoc Q&A
+    return (
+        "You are an expert visual analyst. Answer concisely and directly.\n"
+        f"Question: {user_question}\n"
+        f"Provide a clear, factual response in {QA_ANALYSIS_SENTENCES} sentences. "
+        "If you observe potential safety concerns, note them briefly."
+    )
+
+
+def prompt_batch_observation() -> str:
+    # Recommended #3: /infer_batch observations
+    return (
+        "Surveillance snapshot. Report: Who/what is present, current actions, notable movement or changes. "
+        f"{BATCH_OBS_SENTENCES} sentences max."
+    )
+
+
+def prompt_reason_synthesis(num_obs: int, total_seconds: Optional[float]) -> str:
+    # Recommended #4: /reason synthesis
+    # We ask for a clean, sectioned report, but return JSON for UI friendliness.
+    span_txt = f"spanning {int(total_seconds)} seconds" if total_seconds is not None else "spanning an observation window"
+    return (
+        f"You are a senior security analyst reviewing {num_obs} surveillance snapshots {span_txt}.\n"
+        "Synthesize a situational awareness report.\n"
+        "Return JSON ONLY with exactly these fields:\n"
+        "{\n"
+        '  "summary": "1-2 sentence overview of the scene and activity level",\n'
+        '  "timeline": [{"t": 0, "event": "0s: ..."}, {"t": 15, "event": "15s: ..."}],\n'
+        '  "changes": ["What evolved, appeared, or disappeared during the window"],\n'
+        '  "anomalies": ["Unusual behavior, safety concerns, or policy violations (or: None observed)"],\n'
+        '  "escalation": ["If immediate attention is required (fire, injury, intrusion, unsafe behavior), flag clearly with recommended action (or: None)"],\n'
+        '  "confidence": 0.0\n'
+        "}\n"
+        "Guidelines:\n"
+        "- Timeline should be concise and action-oriented.\n"
+        "- Changes should focus on transitions (entered/exited, started/stopped, moved from X to Y).\n"
+        '- If there are no anomalies, set anomalies to ["None observed"].\n'
+        '- If no escalation is needed, set escalation to ["None"].\n'
+        "- Confidence must be 0.0-1.0 with your best estimate.\n"
+        "Do not include any extra keys or prose outside the JSON."
+    )
+
+
+# -----------------------------
+# Request/Response Models
+# -----------------------------
+InferMode = Literal["qa", "detect"]
+
+class InferRequest(BaseModel):
+    image_b64: str = Field(..., description="Base64-encoded image bytes (JPEG/PNG).")
+    prompt: str = Field(..., description="User prompt or condition/question.")
+    mode: Optional[InferMode] = Field(None, description="detect for rule checks, qa for ad-hoc questions.")
+    max_new_tokens: Optional[int] = None
+    max_image_side: Optional[int] = Field(512, description="Longest side after resize; keeps payload/compute bounded.")
+
+
+class InferResponse(BaseModel):
+    text: str
+    mode: InferMode
+
+
+class BatchItem(BaseModel):
+    t: float
+    image_b64: str
+
+
+class InferBatchRequest(BaseModel):
+    items: List[BatchItem]
+    prompt: Optional[str] = Field(None, description="Optional override; otherwise uses surveillance snapshot template.")
+    max_new_tokens: Optional[int] = None
+    max_image_side: Optional[int] = Field(512, description="Longest side after resize.")
+
+
+class InferBatchResponse(BaseModel):
+    count: int
+    batched: bool
+    results: List[Dict[str, Any]]
+
+
+class ReasonObservation(BaseModel):
+    t: float
+    text: str
+
+
+class ReasonRequest(BaseModel):
+    observations: List[ReasonObservation]
+    total_seconds: Optional[float] = None
+    max_new_tokens: Optional[int] = None
+
+
+class HealthResponse(BaseModel):
+    ok: bool
+    cuda: bool
+    gpu: Optional[str]
+    model_loaded: bool
+    hf_token_present: bool
+    model_id: str
+    tf32_enabled: bool
+
+
+# -----------------------------
+# Model loading / inference
+# -----------------------------
+app = FastAPI()
+
+_processor = None
+_model = None
+_model_loaded = False
+_device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def _enable_perf_flags() -> None:
+    # Safe speedups on NVIDIA GPUs
+    if torch.cuda.is_available():
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
+
+
+def _load_model_if_needed() -> None:
+    global _processor, _model, _model_loaded
+
+    if _model_loaded:
+        return
+
+    if HF_TOKEN is None or len(HF_TOKEN.strip()) == 0:
+        raise RuntimeError("HF_TOKEN is not set. Export HF_TOKEN and restart the service.")
+
+    _enable_perf_flags()
+
+    # NOTE: trust_remote_code may be required for some VLM variants; keep True for Cosmos repos.
+    _processor = AutoProcessor.from_pretrained(DEFAULT_MODEL_ID, token=HF_TOKEN, trust_remote_code=True)
+    _model = AutoModelForVision2Seq.from_pretrained(
+        DEFAULT_MODEL_ID,
+        token=HF_TOKEN,
+        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        device_map="auto" if torch.cuda.is_available() else None,
+        trust_remote_code=True,
+    )
+
+    _model.eval()
+    _model_loaded = True
+    print(f"Model loaded: {DEFAULT_MODEL_ID}")
+
+
+def _decode_image(image_b64: str) -> Image.Image:
+    if not image_b64 or not isinstance(image_b64, str):
+        raise ValueError("image_b64 is missing or empty")
+
+    # Strip data URL prefix if present
+    if image_b64.startswith("data:image"):
+        image_b64 = image_b64.split(",", 1)[-1]
+
+    try:
+        raw = base64.b64decode(image_b64, validate=False)
+    except Exception:
+        raise ValueError("image_b64 could not be base64-decoded")
+
+    try:
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception:
+        raise ValueError("decoded bytes are not a valid image")
+
+    return img
+
+
+def _resize_image(img: Image.Image, max_side: int) -> Image.Image:
+    if not max_side or max_side <= 0:
+        return img
+    w, h = img.size
+    m = max(w, h)
+    if m <= max_side:
+        return img
+    scale = max_side / float(m)
+    nw, nh = int(w * scale), int(h * scale)
+    return img.resize((nw, nh), Image.BICUBIC)
+
+
+@torch.inference_mode()
+def _generate_text(img: Image.Image, prompt: str, max_new_tokens: int) -> str:
+    _load_model_if_needed()
+
+    # Processor handles multimodal formatting
+    inputs = _processor(images=img, text=prompt, return_tensors="pt")
+
+    # Move tensors to model device
+    if torch.cuda.is_available():
+        inputs = {k: v.to(_model.device) for k, v in inputs.items()}
+
+    # Mixed precision on GPU
+    if torch.cuda.is_available():
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            out = _model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+    else:
+        out = _model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+
+    text = _processor.batch_decode(out, skip_special_tokens=True)[0].strip()
+    return text
+
+
+def _clean_for_ui(text: str) -> str:
+    # Remove obvious "echoed instruction" artifacts if any slip through
+    # (keep minimal; don’t over-sanitize)
+    text = re.sub(r"^\s*\(factual observation.*?\)\s*", "", text, flags=re.IGNORECASE)
+    return text.strip()
+
+
+# -----------------------------
+# Routes
+# -----------------------------
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    gpu_name = None
+    if torch.cuda.is_available():
+        try:
+            gpu_name = torch.cuda.get_device_name(0)
+        except Exception:
+            gpu_name = "cuda"
+
+    return HealthResponse(
+        ok=True,
+        cuda=torch.cuda.is_available(),
+        gpu=gpu_name,
+        model_loaded=_model_loaded,
+        hf_token_present=bool(HF_TOKEN),
+        model_id=DEFAULT_MODEL_ID,
+        tf32_enabled=bool(torch.backends.cuda.matmul.allow_tf32) if torch.cuda.is_available() else False,
+    )
+
+
+@app.post("/infer", response_model=InferResponse)
+def infer(req: InferRequest) -> InferResponse:
+    try:
+        img = _decode_image(req.image_b64)
+        img = _resize_image(img, req.max_image_side or 512)
+
+        mode: InferMode
+        if req.mode in ("qa", "detect"):
+            mode = req.mode
+        else:
+            # Back-compat default: treat as QA unless Replit sets mode="detect"
+            mode = "qa"
+
+        if mode == "detect":
+            final_prompt = prompt_infer_detection(req.prompt)
+            max_new = req.max_new_tokens or DEFAULT_MAX_NEW_TOKENS_INFER
+        else:
+            final_prompt = prompt_infer_qa(req.prompt)
+            max_new = req.max_new_tokens or DEFAULT_MAX_NEW_TOKENS_INFER
+
+        t0 = time.time()
+        text = _generate_text(img, final_prompt, max_new)
+        text = _clean_for_ui(text)
+
+        # Optional: tiny normalization for detection output
+        if mode == "detect":
+            # Ensure the three lines exist; if not, still return raw but clean
+            pass
+
+        dt = time.time() - t0
+        # print(f"/infer mode={mode} {dt:.2f}s")
+
+        return InferResponse(text=text, mode=mode)
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        print("ERROR /infer:", repr(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Cosmos API error (infer)")
+
+
+@app.post("/infer_batch", response_model=InferBatchResponse)
+def infer_batch(req: InferBatchRequest) -> InferBatchResponse:
+    try:
+        if not req.items or len(req.items) == 0:
+            raise HTTPException(status_code=400, detail="items must be a non-empty list")
+
+        batch_prompt = req.prompt.strip() if req.prompt and req.prompt.strip() else prompt_batch_observation()
+        max_new = req.max_new_tokens or DEFAULT_MAX_NEW_TOKENS_INFER
+        max_side = req.max_image_side or 512
+
+        results = []
+        for it in req.items:
+            img = _decode_image(it.image_b64)
+            img = _resize_image(img, max_side)
+            text = _generate_text(img, batch_prompt, max_new)
+            results.append({"t": it.t, "text": _clean_for_ui(text)})
+
+        return InferBatchResponse(count=len(results), batched=True, results=results)
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("ERROR /infer_batch:", repr(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Cosmos API error (infer_batch)")
+
+
+@app.post("/reason")
+def reason(req: ReasonRequest) -> Dict[str, Any]:
+    """
+    Text-only synthesis. Caller sends observations: [{t, text}, ...]
+    Returns JSON with summary/timeline/changes/anomalies/escalation/confidence.
+    """
+    try:
+        obs = req.observations or []
+        if len(obs) == 0:
+            raise HTTPException(status_code=400, detail="observations must be non-empty")
+
+        # Build a compact input text for the model (keep short for speed + quality)
+        # We do NOT include long meta instructions here—prompt already defines schema.
+        obs_lines = []
+        for o in obs:
+            # clamp excessively long observation strings
+            txt = (o.text or "").strip()
+            if len(txt) > 1200:
+                txt = txt[:1200] + "..."
+            obs_lines.append(f"{int(o.t)}s: {txt}")
+
+        synthesis_prompt = prompt_reason_synthesis(len(obs), req.total_seconds)
+        payload_text = "OBSERVATIONS:\n" + "\n".join(obs_lines)
+
+        # Cosmos is vision+text; we can still call it with a tiny blank image, but
+        # to keep behavior consistent, we’ll pass a 1x1 image.
+        img = Image.new("RGB", (1, 1), (0, 0, 0))
+
+        max_new = req.max_new_tokens or DEFAULT_MAX_NEW_TOKENS_REASON
+        text = _generate_text(img, synthesis_prompt + "\n\n" + payload_text, max_new)
+        text = _clean_for_ui(text)
+
+        # Try to parse JSON strictly; if parsing fails, return raw in a safe wrapper
+        import json
+        try:
+            data = json.loads(text)
+            return data
+        except Exception:
+            return {
+                "summary": "Synthesis parsing failed (non-JSON output).",
+                "timeline": [],
+                "changes": [],
+                "anomalies": ["None observed"],
+                "escalation": ["None"],
+                "confidence": 0.4,
+                "raw": text
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("ERROR /reason:", repr(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Cosmos API error (reason)")

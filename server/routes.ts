@@ -189,27 +189,23 @@ async function analyzeWithCosmos(
     console.log(`[Cosmos] Frame data doesn't have expected prefix. First 100 chars: ${frameData.substring(0, 100)}`);
   }
 
-  const contextPreamble = sceneContext 
-    ? `Scene Context: ${sceneContext}\n\n` 
-    : "";
-
-  const fullPrompt = `${contextPreamble}Security camera analysis. Check if this condition is present: "${prompt}"
-
-Respond with:
-DETECTED: YES or NO
-CONFIDENCE: HIGH, MEDIUM, or LOW
-ANALYSIS: Brief description of what you observe`;
-
   const roi = boundingBoxToROI(boundingBox);
+
+  // Build condition with optional scene context
+  const conditionWithContext = sceneContext 
+    ? `[Context: ${sceneContext}] ${prompt}` 
+    : prompt;
 
   const payload: {
     image_b64: string;
     prompt: string;
+    mode: string;
     max_new_tokens: number;
     roi?: CosmosROI;
   } = {
     image_b64: base64Data,
-    prompt: fullPrompt,
+    prompt: conditionWithContext,
+    mode: "detect",
     max_new_tokens: 256,
   };
 
@@ -268,18 +264,16 @@ async function analyzeWithCosmosAdhocDirect(frameData: string, userPrompt: strin
     ? frameData.slice(dataUrlMatch[0].length)
     : frameData;
 
-  const contextPreamble = sceneContext 
-    ? `Scene Context: ${sceneContext}\n\n` 
-    : "";
-
-  const prompt = `${contextPreamble}Analyze this image. User question: "${userPrompt}"
-
-Describe what you observe and answer the question directly.`;
+  // Build question with optional scene context
+  const questionWithContext = sceneContext 
+    ? `[Context: ${sceneContext}] ${userPrompt}` 
+    : userPrompt;
 
   const payload = {
     image_b64: base64Data,
-    prompt,
-    max_new_tokens: 1024,
+    prompt: questionWithContext,
+    mode: "qa",
+    max_new_tokens: 512,
   };
 
   const targetUrl = `${COSMOS_ENDPOINT}/infer`;
@@ -413,19 +407,16 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
   const observationsPayload = observations.map(o => ({
     t: o.t,
     text: o.text,
-    confidence: o.confidence,
   }));
 
-  const contextPreamble = sceneContext 
-    ? `Scene Context from operator: "${sceneContext}"\nUse this context to focus your analysis.\n\n` 
-    : "";
-
-  const prompt = `${contextPreamble}Synthesize these security camera observations into an analyst-quality report. Use clear section headers: Summary, Notable Changes, Persistent Context, Timeline, Anomalies, Confidence. Focus on actions, interactions, transitions, and situational awareness. Be concise.`;
+  // Calculate total time span from observations
+  const maxT = Math.max(...observations.map(o => o.t));
+  const totalSeconds = maxT > 0 ? maxT : observations.length * 5;
 
   const payload = {
-    prompt,
     observations: observationsPayload,
-    max_new_tokens: 2048,
+    total_seconds: totalSeconds,
+    max_new_tokens: 768,
   };
 
   const requestBody = JSON.stringify(payload);
@@ -464,6 +455,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     
     console.log(`[REASON] body parsed: +${parseMs}ms | TOTAL: ${totalMs}ms | ${responseWords} words, ${responseChars} chars`);
     
+    // Try to parse the structured result first (from apiResult.result)
     if (apiResult.result) {
       const parseResult = sceneAgentSynthesisSchema.safeParse(apiResult.result);
       if (parseResult.success) {
@@ -472,77 +464,79 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
       console.error("Failed to validate synthesis result:", parseResult.error);
     }
 
+    // Try to parse JSON from raw text (server returns JSON)
     if (rawText) {
-      const extractSection = (text: string, headers: string[], nextHeaders: string[]): string => {
-        for (const header of headers) {
-          const headerRegex = new RegExp(`(?:^|\\n)\\s*(?:#{1,3}\\s*)?(?:\\*\\*)?${header}(?:\\*\\*)?:?\\s*`, 'i');
-          const match = text.match(headerRegex);
-          if (match) {
-            const startIdx = match.index! + match[0].length;
-            let endIdx = text.length;
-            for (const next of nextHeaders) {
-              const nextRegex = new RegExp(`(?:^|\\n)\\s*(?:#{1,3}\\s*)?(?:\\*\\*)?${next}(?:\\*\\*)?:?\\s*`, 'i');
-              const nextMatch = text.substring(startIdx).match(nextRegex);
-              if (nextMatch && nextMatch.index !== undefined) {
-                endIdx = Math.min(endIdx, startIdx + nextMatch.index);
+      try {
+        // Extract JSON from response (may have surrounding text)
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          
+          // Convert server format to our schema format
+          const events: { t: number; description: string }[] = [];
+          if (Array.isArray(parsed.timeline)) {
+            for (const item of parsed.timeline) {
+              const t = typeof item.t === 'number' ? item.t : 0;
+              // Server uses "event" field, we use "description"
+              const eventText = item.event || item.description || '';
+              // Strip timestamp prefix from event text (e.g., "0s: Worker enters" → "Worker enters")
+              const description = eventText.replace(/^\d+s?:\s*/, '').trim();
+              if (description) {
+                events.push({ t, description: description.substring(0, 150) });
               }
             }
-            return text.substring(startIdx, endIdx).trim();
           }
-        }
-        return "";
-      };
 
-      const allNextHeaders = ['Summary', 'Overview', 'Notable', 'Changes', 'Timeline', 'Events', 'Anomalies', 'Confidence', 'Escalations'];
-      const summary = extractSection(rawText, ['Summary', 'Overview', 'Key Takeaway'], allNextHeaders) || rawText.substring(0, 400);
-      const timeline = extractSection(rawText, ['Timeline', 'Events', 'Key Events', 'Moments'], ['Anomalies', 'Confidence', 'Escalations']);
-      const anomalies = extractSection(rawText, ['Anomalies', 'Anomaly', 'Unusual', 'Unexpected'], ['Confidence', 'Escalations']);
-      const confidenceStr = extractSection(rawText, ['Confidence', 'Certainty'], []);
-      
-      const events: { t: number; description: string }[] = [];
-      const timelineLines = timeline.split(/[\n\r]+/).filter(l => l.trim());
-      for (const line of timelineLines) {
-        const timeMatch = line.match(/(?:t\s*[=:]?\s*)?(\d+)\s*s(?:ec(?:onds?)?)?|(\d{1,2}):(\d{2})/i);
-        let t = events.length * 5;
-        if (timeMatch) {
-          if (timeMatch[1]) {
-            t = parseInt(timeMatch[1]);
-          } else if (timeMatch[2] && timeMatch[3]) {
-            t = parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
-          }
+          // Handle "escalation" (singular) vs "escalations" (plural)
+          const escalations = Array.isArray(parsed.escalations) 
+            ? parsed.escalations.filter((e: string) => e && e !== "None")
+            : Array.isArray(parsed.escalation)
+              ? parsed.escalation.filter((e: string) => e && e !== "None")
+              : [];
+
+          const anomalies = Array.isArray(parsed.anomalies)
+            ? parsed.anomalies.filter((a: string) => a && a !== "None observed" && a !== "None")
+            : [];
+
+          const changes = Array.isArray(parsed.changes)
+            ? parsed.changes.filter((c: string) => c && c !== "None")
+            : [];
+
+          const confidence = typeof parsed.confidence === 'number' 
+            ? Math.min(1, Math.max(0, parsed.confidence))
+            : 0.5;
+
+          return {
+            synthesis: {
+              summary: (parsed.summary || "Analysis complete.").substring(0, 400),
+              events: events.length > 0 ? events.slice(0, 8) : [{ t: 0, description: "Scene observed" }],
+              changes,
+              anomalies,
+              escalations,
+              confidence,
+            },
+            rawText,
+          };
         }
-        const description = line.replace(/^[-•*]\s*/, '').replace(/(?:t\s*[=:]?\s*)?\d+\s*s(?:ec(?:onds?)?)?\s*[-:–]?\s*/i, '').replace(/\d{1,2}:\d{2}\s*[-:–]?\s*/, '').trim();
-        if (description && description.length > 5) {
-          events.push({ t, description: description.substring(0, 100) });
-        }
+      } catch (jsonError) {
+        console.log("[REASON] JSON parse failed, using fallback:", jsonError);
       }
 
-      const anomalyList = anomalies.split(/[\n\r]+/).filter(l => l.trim()).map(l => l.replace(/^[-•*]\s*/, '').trim()).filter(l => l.length > 3).slice(0, 6);
-      
-      let confidence = 0.5;
-      const confMatch = confidenceStr.match(/([\d.]+)/);
-      if (confMatch) {
-        const val = parseFloat(confMatch[1]);
-        confidence = val > 1 ? val / 100 : val;
-      } else if (/high/i.test(confidenceStr) || /high/i.test(rawText.substring(rawText.length - 200))) {
-        confidence = 0.85;
-      } else if (/low/i.test(confidenceStr)) {
-        confidence = 0.35;
-      }
-      
+      // Fallback: use raw text as summary
       return {
         synthesis: {
-          summary: summary.substring(0, 400) || "Analysis complete.",
-          events: events.length > 0 ? events.slice(0, 8) : [{ t: 0, description: "Scene observed" }],
-          anomalies: anomalyList,
+          summary: rawText.substring(0, 400) || "Analysis complete.",
+          events: [{ t: 0, description: "Scene observed" }],
+          changes: [],
+          anomalies: [],
           escalations: [],
-          confidence,
+          confidence: 0.5,
         },
         rawText,
       };
     }
 
-    return { synthesis: { summary: rawText.substring(0, 400) || "Analysis complete.", events: [], anomalies: [], escalations: [], confidence: 0.5 }, rawText };
+    return { synthesis: { summary: "Analysis complete.", events: [], changes: [], anomalies: [], escalations: [], confidence: 0.5 }, rawText };
   } catch (error) {
     console.error("Error synthesizing observations:", error);
     return { 
