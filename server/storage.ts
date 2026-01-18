@@ -17,8 +17,6 @@ const DEMO_VIDEO_SOURCES = [
   { name: "Loading Dock", url: "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4" },
   { name: "Product Picking", url: "/attached_assets/product-picking.mp4" },
   { name: "Engine Assembly", url: "/attached_assets/engine-assembly.mp4" },
-  { name: "Parking Lot", url: "/attached_assets/parking-lot.mp4" },
-  { name: "Newspaper", url: "/attached_assets/newspaper.mp4" },
 ];
 
 export async function seedDemoVideoSources(): Promise<void> {
