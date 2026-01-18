@@ -238,14 +238,33 @@ RECOMMENDED_ACTIONS:`;
     const result = await response.json();
     const rawContent = result.text || "";
     const content = stripChatMarkers(rawContent);
+    
+    // Normalize: insert line breaks before headers for consistent parsing
+    const normalized = content.replace(/\s*(DETECTED|CONFIDENCE|SIGNALS|ANALYSIS|RECOMMENDED_ACTIONS):/gi, '\n$1:');
 
-    const detectedMatch = content.match(/DETECTED:\s*(YES|NO)/i);
-    const confidenceMatch = content.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
-    const analysisMatch = content.match(/ANALYSIS:\s*([\s\S]+)/i);
+    const detectedMatch = normalized.match(/DETECTED:\s*(YES|NO)/i);
+    const confidenceMatch = normalized.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
+    
+    // Extract each section up to the next header
+    const extractSection = (text: string, header: string): string => {
+      const regex = new RegExp(`${header}:\\s*([\\s\\S]*?)(?=\\n(?:DETECTED|CONFIDENCE|SIGNALS|ANALYSIS|RECOMMENDED_ACTIONS):|$)`, 'i');
+      const match = text.match(regex);
+      return match?.[1]?.trim() || "";
+    };
+    
+    const signals = extractSection(normalized, 'SIGNALS');
+    const analysisText = extractSection(normalized, 'ANALYSIS');
+    const actions = extractSection(normalized, 'RECOMMENDED_ACTIONS');
 
     const detected = detectedMatch?.[1]?.toUpperCase() === "YES";
     const confidence = confidenceMatch?.[1]?.toUpperCase() || "MEDIUM";
-    const analysis = analysisMatch?.[1]?.trim() || content;
+    
+    // Build formatted analysis with clean sections
+    const sections: string[] = [];
+    if (signals) sections.push(`SIGNALS: ${signals}`);
+    if (analysisText) sections.push(`ANALYSIS: ${analysisText}`);
+    if (actions) sections.push(`RECOMMENDED_ACTIONS: ${actions}`);
+    const analysis = sections.length > 0 ? sections.join('\n\n') : content;
 
     return { detected, analysis, confidence };
   } catch (error) {

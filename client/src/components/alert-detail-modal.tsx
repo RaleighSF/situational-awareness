@@ -18,25 +18,18 @@ interface AlertDetailModalProps {
 }
 
 function parseAnalysisResult(raw: string) {
-  const extractSection = (text: string, header: string, nextHeaders: string[]): string => {
-    const headerRegex = new RegExp(`${header}:\\s*`, 'i');
-    const match = text.match(headerRegex);
-    if (!match) return "";
-    const startIdx = match.index! + match[0].length;
-    let endIdx = text.length;
-    for (const next of nextHeaders) {
-      const nextRegex = new RegExp(`\\n${next}:`, 'i');
-      const nextMatch = text.substring(startIdx).match(nextRegex);
-      if (nextMatch && nextMatch.index !== undefined) {
-        endIdx = Math.min(endIdx, startIdx + nextMatch.index);
-      }
-    }
-    return text.substring(startIdx, endIdx).trim();
+  // Normalize: insert line breaks before headers for consistent parsing
+  const normalized = raw.replace(/\s*(DETECTED|CONFIDENCE|SIGNALS|ANALYSIS|RECOMMENDED_ACTIONS):/gi, '\n$1:');
+  
+  const extractSection = (text: string, header: string): string => {
+    const regex = new RegExp(`${header}:\\s*([\\s\\S]*?)(?=\\n(?:DETECTED|CONFIDENCE|SIGNALS|ANALYSIS|RECOMMENDED_ACTIONS):|$)`, 'i');
+    const match = text.match(regex);
+    return match?.[1]?.trim() || "";
   };
 
-  const signals = extractSection(raw, 'SIGNALS', ['ANALYSIS', 'RECOMMENDED_ACTIONS']);
-  const analysis = extractSection(raw, 'ANALYSIS', ['RECOMMENDED_ACTIONS']);
-  const actions = extractSection(raw, 'RECOMMENDED_ACTIONS', []);
+  const signals = extractSection(normalized, 'SIGNALS');
+  const analysis = extractSection(normalized, 'ANALYSIS');
+  const actions = extractSection(normalized, 'RECOMMENDED_ACTIONS');
 
   return { signals, analysis, actions };
 }
