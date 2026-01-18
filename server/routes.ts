@@ -923,10 +923,15 @@ export async function registerRoutes(
   });
 
   app.get("/api/cosmos/health", async (_req, res) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
     try {
       const response = await fetch(`${COSMOS_ENDPOINT}/health`, {
-        signal: AbortSignal.timeout(5000)
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+      
       if (response.ok) {
         const data = await response.json();
         res.json({ 
@@ -947,6 +952,7 @@ export async function registerRoutes(
         });
       }
     } catch (error) {
+      clearTimeout(timeoutId);
       res.status(503).json({ 
         status: "unavailable", 
         endpoint: COSMOS_ENDPOINT,
