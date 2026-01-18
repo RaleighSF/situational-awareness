@@ -13,6 +13,40 @@ import {
 import { db } from "./db";
 import { eq, desc, inArray } from "drizzle-orm";
 
+const DEMO_VIDEO_SOURCES = [
+  { name: "Loading Dock", url: "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4" },
+  { name: "Product Picking", url: "/attached_assets/product-picking.mp4" },
+  { name: "Engine Assembly", url: "/attached_assets/engine-assembly.mp4" },
+  { name: "Parking Lot", url: "/attached_assets/parking-lot.mp4" },
+  { name: "Newspaper", url: "/attached_assets/newspaper.mp4" },
+];
+
+export async function seedDemoVideoSources(): Promise<void> {
+  console.log("[Seed] Syncing demo video sources...");
+  const existing = await db.select().from(videoSources);
+  const existingByName = new Map(existing.map(s => [s.name, s]));
+  
+  for (const demo of DEMO_VIDEO_SOURCES) {
+    const existingSource = existingByName.get(demo.name);
+    if (existingSource) {
+      if (existingSource.url !== demo.url) {
+        console.log(`[Seed] Updating URL for: ${demo.name}`);
+        await db.update(videoSources)
+          .set({ url: demo.url })
+          .where(eq(videoSources.id, existingSource.id));
+      }
+    } else {
+      console.log(`[Seed] Adding missing video source: ${demo.name}`);
+      await db.insert(videoSources).values({
+        name: demo.name,
+        url: demo.url,
+        isActive: true,
+      });
+    }
+  }
+  console.log("[Seed] Demo video sources sync complete");
+}
+
 export interface IStorage {
   getVideoSources(): Promise<VideoSource[]>;
   getVideoSource(id: string): Promise<VideoSource | undefined>;
