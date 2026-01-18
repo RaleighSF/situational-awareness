@@ -193,14 +193,12 @@ async function analyzeWithCosmos(
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const fullPrompt = `${contextPreamble}Task: ${prompt}
+  const fullPrompt = `${contextPreamble}Security camera analysis. Check if this condition is present: "${prompt}"
 
-Provide your analysis in this format:
-DETECTED: [YES or NO]
-CONFIDENCE: [HIGH, MEDIUM, or LOW]
-SIGNALS: [describe any warning signs, hazards, or notable indicators you observe]
-ANALYSIS: [your detailed assessment]
-RECOMMENDED_ACTIONS: [what should be done, or "None" if nothing needed]`;
+Respond with:
+DETECTED: YES or NO
+CONFIDENCE: HIGH, MEDIUM, or LOW
+ANALYSIS: Brief description of what you observe`;
 
   const roi = boundingBoxToROI(boundingBox);
 
@@ -212,7 +210,7 @@ RECOMMENDED_ACTIONS: [what should be done, or "None" if nothing needed]`;
   } = {
     image_b64: base64Data,
     prompt: fullPrompt,
-    max_new_tokens: 512,
+    max_new_tokens: 256,
   };
 
   if (roi) {
@@ -237,33 +235,14 @@ RECOMMENDED_ACTIONS: [what should be done, or "None" if nothing needed]`;
     const result = await response.json();
     const rawContent = result.text || "";
     const content = stripChatMarkers(rawContent);
-    
-    // Normalize: insert line breaks before headers for consistent parsing
-    const normalized = content.replace(/\s*(DETECTED|CONFIDENCE|SIGNALS|ANALYSIS|RECOMMENDED_ACTIONS):/gi, '\n$1:');
 
-    const detectedMatch = normalized.match(/DETECTED:\s*(YES|NO)/i);
-    const confidenceMatch = normalized.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
-    
-    // Extract each section up to the next header
-    const extractSection = (text: string, header: string): string => {
-      const regex = new RegExp(`${header}:\\s*([\\s\\S]*?)(?=\\n(?:DETECTED|CONFIDENCE|SIGNALS|ANALYSIS|RECOMMENDED_ACTIONS):|$)`, 'i');
-      const match = text.match(regex);
-      return match?.[1]?.trim() || "";
-    };
-    
-    const signals = extractSection(normalized, 'SIGNALS');
-    const analysisText = extractSection(normalized, 'ANALYSIS');
-    const actions = extractSection(normalized, 'RECOMMENDED_ACTIONS');
+    const detectedMatch = content.match(/DETECTED:\s*(YES|NO)/i);
+    const confidenceMatch = content.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
+    const analysisMatch = content.match(/ANALYSIS:\s*([\s\S]+)/i);
 
     const detected = detectedMatch?.[1]?.toUpperCase() === "YES";
     const confidence = confidenceMatch?.[1]?.toUpperCase() || "MEDIUM";
-    
-    // Build formatted analysis with clean sections
-    const sections: string[] = [];
-    if (signals) sections.push(`SIGNALS: ${signals}`);
-    if (analysisText) sections.push(`ANALYSIS: ${analysisText}`);
-    if (actions) sections.push(`RECOMMENDED_ACTIONS: ${actions}`);
-    const analysis = sections.length > 0 ? sections.join('\n\n') : content;
+    const analysis = analysisMatch?.[1]?.trim() || content;
 
     return { detected, analysis, confidence };
   } catch (error) {
@@ -355,18 +334,7 @@ async function getBatchSceneObservations(
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const prompt = `${contextPreamble}You are analyzing a time-ordered sequence. Keep the structure identical for each frame so changes can be compared across time.
-
-You are an operations-grade scene analyst. Analyze this single video frame and return concise, factual observations only. Use this structure exactly:
-SCENE: (1 sentence of what's happening and where)
-ENTITIES: (people/machines with rough counts only if confident)
-OBJECTS: (packages/conveyors/labels with notable attributes)
-ACTIONS: (what is moving or changing in this frame)
-SIGNALS: (icons like fragile, hazards, jams, PPE)
-COUNTS: (only numbers you are confident in, otherwise 'uncertain')
-NOTABLE DETAIL: (one subtle but important observation)
-
-Be factual and say 'uncertain' if resolution limits confidence.`;
+  const prompt = `${contextPreamble}Security camera observation. Describe scene state: people (count, positions, actions, movement direction), objects (type, location, state), vehicles/equipment (type, motion), and notable signals or changes. Be concise and factual.`;
 
   const items = frames.map((frameData, index) => {
     const t = index * intervalSeconds;
@@ -445,16 +413,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     ? `Scene Context from operator: "${sceneContext}"\nUse this context to focus your analysis.\n\n` 
     : "";
 
-  const prompt = `${contextPreamble}You are a situational-awareness analyst summarizing multiple frame observations from a single camera over a short time window. Use only the provided observations. Produce a report with these sections only:
-
-SUMMARY: (2-4 sentence executive overview)
-WHAT CHANGED: (bulleted transitions such as entered/exited, moved from X to Y, started/stopped)
-WHAT STAYED THE SAME: (persistent elements)
-TIMELINE: (T+ timestamps with short factual events)
-RISKS / ANOMALIES: (if any, otherwise 'None observed')
-CONFIDENCE: (0.0-1.0 with brief justification)
-
-Be punchy, concrete, and avoid speculation.`;
+  const prompt = `${contextPreamble}Synthesize these security camera observations into an analyst-quality report. Use clear section headers: Summary, Notable Changes, Persistent Context, Timeline, Anomalies, Confidence. Focus on actions, interactions, transitions, and situational awareness. Be concise.`;
 
   const payload = {
     prompt,
@@ -527,27 +486,25 @@ Be punchy, concrete, and avoid speculation.`;
         return "";
       };
 
-      const allNextHeaders = ['Summary', 'Overview', 'What Changed', 'What Stayed', 'Timeline', 'Events', 'Risks', 'Anomalies', 'Confidence'];
+      const allNextHeaders = ['Summary', 'Overview', 'Notable', 'Changes', 'Timeline', 'Events', 'Anomalies', 'Confidence', 'Escalations'];
       const summary = extractSection(rawText, ['Summary', 'Overview', 'Key Takeaway'], allNextHeaders) || rawText.substring(0, 400);
-      const timeline = extractSection(rawText, ['Timeline', 'Events', 'Key Events', 'Moments'], ['Risks', 'Anomalies', 'Confidence']);
-      const anomalies = extractSection(rawText, ['Risks / Anomalies', 'Risks', 'Anomalies', 'Anomaly', 'Unusual'], ['Confidence']);
+      const timeline = extractSection(rawText, ['Timeline', 'Events', 'Key Events', 'Moments'], ['Anomalies', 'Confidence', 'Escalations']);
+      const anomalies = extractSection(rawText, ['Anomalies', 'Anomaly', 'Unusual', 'Unexpected'], ['Confidence', 'Escalations']);
       const confidenceStr = extractSection(rawText, ['Confidence', 'Certainty'], []);
       
       const events: { t: number; description: string }[] = [];
       const timelineLines = timeline.split(/[\n\r]+/).filter(l => l.trim());
       for (const line of timelineLines) {
-        const timeMatch = line.match(/T\+\s*(\d+)\s*s?|(?:t\s*[=:]?\s*)?(\d+)\s*s(?:ec(?:onds?)?)?|(\d{1,2}):(\d{2})/i);
+        const timeMatch = line.match(/(?:t\s*[=:]?\s*)?(\d+)\s*s(?:ec(?:onds?)?)?|(\d{1,2}):(\d{2})/i);
         let t = events.length * 5;
         if (timeMatch) {
           if (timeMatch[1]) {
             t = parseInt(timeMatch[1]);
-          } else if (timeMatch[2]) {
-            t = parseInt(timeMatch[2]);
-          } else if (timeMatch[3] && timeMatch[4]) {
-            t = parseInt(timeMatch[3]) * 60 + parseInt(timeMatch[4]);
+          } else if (timeMatch[2] && timeMatch[3]) {
+            t = parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
           }
         }
-        const description = line.replace(/^[-•*]\s*/, '').replace(/T\+\s*\d+\s*s?\s*[-:–]?\s*/i, '').replace(/(?:t\s*[=:]?\s*)?\d+\s*s(?:ec(?:onds?)?)?\s*[-:–]?\s*/i, '').replace(/\d{1,2}:\d{2}\s*[-:–]?\s*/, '').trim();
+        const description = line.replace(/^[-•*]\s*/, '').replace(/(?:t\s*[=:]?\s*)?\d+\s*s(?:ec(?:onds?)?)?\s*[-:–]?\s*/i, '').replace(/\d{1,2}:\d{2}\s*[-:–]?\s*/, '').trim();
         if (description && description.length > 5) {
           events.push({ t, description: description.substring(0, 100) });
         }

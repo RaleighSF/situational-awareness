@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, Clock, Target, AlertCircle, FileText, Lightbulb } from "lucide-react";
+import { AlertTriangle, Clock, Target } from "lucide-react";
 import type { Alert, Prompt } from "@shared/schema";
 
 interface AlertDetailModalProps {
@@ -15,23 +15,6 @@ interface AlertDetailModalProps {
   prompt: Prompt | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function parseAnalysisResult(raw: string) {
-  // Normalize: insert line breaks before headers for consistent parsing
-  const normalized = raw.replace(/\s*(DETECTED|CONFIDENCE|SIGNALS|ANALYSIS|RECOMMENDED_ACTIONS):/gi, '\n$1:');
-  
-  const extractSection = (text: string, header: string): string => {
-    const regex = new RegExp(`${header}:\\s*([\\s\\S]*?)(?=\\n(?:DETECTED|CONFIDENCE|SIGNALS|ANALYSIS|RECOMMENDED_ACTIONS):|$)`, 'i');
-    const match = text.match(regex);
-    return match?.[1]?.trim() || "";
-  };
-
-  const signals = extractSection(normalized, 'SIGNALS');
-  const analysis = extractSection(normalized, 'ANALYSIS');
-  const actions = extractSection(normalized, 'RECOMMENDED_ACTIONS');
-
-  return { signals, analysis, actions };
 }
 
 export function AlertDetailModal({
@@ -42,12 +25,9 @@ export function AlertDetailModal({
 }: AlertDetailModalProps) {
   if (!alert) return null;
 
-  const parsed = parseAnalysisResult(alert.analysisResult || "");
-  const hasStructuredContent = parsed.signals || parsed.analysis || parsed.actions;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
@@ -75,79 +55,39 @@ export function AlertDetailModal({
             </div>
           )}
 
-          <div className="flex items-center gap-4 text-sm">
-            {alert.confidence && (
-              <Badge variant="outline">
-                {alert.confidence} confidence
-              </Badge>
-            )}
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              <span>
-                Check interval: {prompt?.frequencySeconds ?? 60}s
-              </span>
-            </div>
-          </div>
-
-          <Separator />
-
-          {hasStructuredContent ? (
-            <div className="space-y-4">
-              {parsed.signals && parsed.signals.length > 3 && !parsed.signals.match(/^(ANALYSIS|RECOMMENDED_ACTIONS|DETECTED|CONFIDENCE):/i) && (
-                <div>
-                  <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
-                    <AlertCircle className="h-4 w-4 text-yellow-500" />
-                    Signals
-                  </h4>
-                  <p className="text-sm bg-yellow-500/10 p-3 rounded-md border border-yellow-500/20">
-                    {parsed.signals}
-                  </p>
-                </div>
-              )}
-
-              {parsed.analysis && parsed.analysis.length > 3 && !parsed.analysis.match(/^(SIGNALS|RECOMMENDED_ACTIONS|DETECTED|CONFIDENCE):/i) && (
-                <div>
-                  <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
-                    <FileText className="h-4 w-4 text-blue-500" />
-                    Analysis
-                  </h4>
-                  <p className="text-sm bg-blue-500/10 p-3 rounded-md border border-blue-500/20">
-                    {parsed.analysis}
-                  </p>
-                </div>
-              )}
-
-              {parsed.actions && parsed.actions.length > 3 && parsed.actions.toLowerCase() !== "none" && !parsed.actions.match(/^(SIGNALS|ANALYSIS|DETECTED|CONFIDENCE):/i) && (
-                <div>
-                  <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
-                    <Lightbulb className="h-4 w-4 text-green-500" />
-                    Recommended Actions
-                  </h4>
-                  <p className="text-sm bg-green-500/10 p-3 rounded-md border border-green-500/20">
-                    {parsed.actions}
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
+          <div className="space-y-3">
             <div>
-              <h4 className="text-sm font-medium mb-2">Analysis</h4>
+              <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                <Target className="h-4 w-4" />
+                Detection Rule
+              </h4>
+              <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
+                {prompt?.prompt ?? "Unknown prompt"}
+              </p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h4 className="text-sm font-medium mb-2">Analysis Result</h4>
               <p className="text-sm bg-accent/30 p-3 rounded-md">
                 {alert.analysisResult}
               </p>
             </div>
-          )}
 
-          <Separator />
-
-          <div>
-            <h4 className="text-sm font-medium flex items-center gap-2 mb-2 text-muted-foreground">
-              <Target className="h-4 w-4" />
-              Detection Rule
-            </h4>
-            <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
-              {prompt?.prompt ?? "Unknown prompt"}
-            </p>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              {alert.confidence && (
+                <Badge variant="outline">
+                  Confidence: {alert.confidence}
+                </Badge>
+              )}
+              <div className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                <span>
+                  Check interval: {prompt?.frequencySeconds ?? 60}s
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </DialogContent>
