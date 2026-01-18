@@ -13,6 +13,8 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 - Auto-persist uploads: Videos automatically copy to /attached_assets/ on upload
 - Clean filenames: Uploads get sanitized names (e.g., "Parking Lot" → "parking-lot.mp4")
 - File size limit: Individual videos must be under 50MB for deployment
+- Canonical demo data: Video sources, settings, and prompts are defined in server/storage.ts
+- Parking lot video converted from MOV to MP4 for better browser compatibility
 
 ### v1.8
 - Upload/delete buttons hidden in production mode

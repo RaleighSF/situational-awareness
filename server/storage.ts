@@ -13,12 +13,51 @@ import {
 import { db } from "./db";
 import { eq, desc, inArray } from "drizzle-orm";
 
+// Canonical demo dataset - this defines all demo data that will be restored on each production deployment
 const DEMO_VIDEO_SOURCES = [
-  { name: "Loading Dock", url: "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4" },
-  { name: "Product Picking", url: "/attached_assets/product-picking.mp4" },
-  { name: "Engine Assembly", url: "/attached_assets/engine-assembly.mp4" },
-  { name: "Parking Lot", url: "/attached_assets/parking-lot.mov" },
-  { name: "The Newspaper", url: "/attached_assets/newspaper.mp4" },
+  { 
+    name: "Loading Dock", 
+    url: "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4",
+    settings: { sceneContext: "This is our loading dock and I'm primarily concerned with worker productivity vs. just sitting around and socializing." }
+  },
+  { 
+    name: "Product Picking", 
+    url: "/attached_assets/product-picking.mp4",
+    settings: null
+  },
+  { 
+    name: "Engine Assembly", 
+    url: "/attached_assets/engine-assembly.mp4",
+    settings: { sceneContext: "Motorcycle Engine assembly. The worker must never strike the engine with their hand to seat parts together." }
+  },
+  { 
+    name: "Parking Lot", 
+    url: "/attached_assets/parking-lot.mp4",
+    settings: null
+  },
+  { 
+    name: "The Newspaper", 
+    url: "/attached_assets/newspaper.mp4",
+    settings: null
+  },
+];
+
+// Demo prompts linked by video source name
+const DEMO_PROMPTS = [
+  {
+    videoSourceName: "Loading Dock",
+    name: "Red Packages",
+    prompt: "Detect the presence of Red Packages in this scene.",
+    boundingBox: { x: 24.206880431780032, y: 42.79319267891884, width: 26.382779796434416, height: 23.69340611601156 },
+    frequencySeconds: 10
+  },
+  {
+    videoSourceName: "Product Picking",
+    name: "Safety Gear Analyzer",
+    prompt: "Detect the absence of required safety gear. All workers must have on safety goggles and gloves.",
+    boundingBox: null,
+    frequencySeconds: 10
+  }
 ];
 
 // Reset database to canonical demo state - used in production to sync with dev
@@ -34,13 +73,32 @@ export async function resetToDemo(): Promise<void> {
   console.log("[Reset] Cleared video sources");
   
   // Insert canonical demo video sources
+  const sourceIdMap = new Map<string, string>();
   for (const demo of DEMO_VIDEO_SOURCES) {
-    await db.insert(videoSources).values({
+    const [inserted] = await db.insert(videoSources).values({
       name: demo.name,
       url: demo.url,
       isActive: true,
-    });
-    console.log(`[Reset] Added: ${demo.name}`);
+      settings: demo.settings,
+    }).returning();
+    sourceIdMap.set(demo.name, inserted.id);
+    console.log(`[Reset] Added video source: ${demo.name}`);
+  }
+  
+  // Insert canonical demo prompts
+  for (const demoPrompt of DEMO_PROMPTS) {
+    const sourceId = sourceIdMap.get(demoPrompt.videoSourceName);
+    if (sourceId) {
+      await db.insert(prompts).values({
+        videoSourceId: sourceId,
+        name: demoPrompt.name,
+        prompt: demoPrompt.prompt,
+        boundingBox: demoPrompt.boundingBox,
+        frequencySeconds: demoPrompt.frequencySeconds,
+        isActive: true,
+      });
+      console.log(`[Reset] Added prompt: ${demoPrompt.name}`);
+    }
   }
   
   console.log("[Reset] Database reset complete - ready with demo data");
