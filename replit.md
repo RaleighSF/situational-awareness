@@ -7,11 +7,13 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 ## Version History
 
 ### v2.1 (Current)
-- **Cosmos API update**: Prompts simplified to pure user instructions (no JSON enforcement)
+- **Cosmos API update**: Operations-grade analyst prompts with structured output format
+- /infer prompts: SCENE, ENTITIES, OBJECTS, ACTIONS, SIGNALS, ANALYSIS structure
+- /infer_batch: Same structure with time-ordered sequence preamble for temporal comparison
+- /reason synthesis: SUMMARY, WHAT CHANGED, WHAT STAYED THE SAME, TIMELINE, RISKS/ANOMALIES, CONFIDENCE
 - Response parsing: Strip chat wrapper tokens (user/assistant markers) from API responses
-- Scene Agent: Parse new section headers format (Summary, Notable Changes, Timeline, Anomalies, Confidence)
-- Batch observations: Concise scene descriptions for better inference quality
-- Ad-hoc analysis: Streamlined prompts for faster responses
+- Timeline parsing: Supports T+ timestamps (T+0, T+5s) in addition to other formats
+- Section parsing: Resilient header extraction with synonyms and fallbacks
 
 ### v2.0
 - Production reset: Each deployment resets prod database to match dev demo state
