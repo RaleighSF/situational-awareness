@@ -93,7 +93,7 @@ export function AlertDetailModal({
 
           {hasStructuredContent ? (
             <div className="space-y-4">
-              {parsed.signals && (
+              {parsed.signals && parsed.signals.length > 3 && !parsed.signals.match(/^(ANALYSIS|RECOMMENDED_ACTIONS|DETECTED|CONFIDENCE):/i) && (
                 <div>
                   <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
                     <AlertCircle className="h-4 w-4 text-yellow-500" />
@@ -105,7 +105,7 @@ export function AlertDetailModal({
                 </div>
               )}
 
-              {parsed.analysis && (
+              {parsed.analysis && parsed.analysis.length > 3 && !parsed.analysis.match(/^(SIGNALS|RECOMMENDED_ACTIONS|DETECTED|CONFIDENCE):/i) && (
                 <div>
                   <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
                     <FileText className="h-4 w-4 text-blue-500" />
@@ -117,7 +117,7 @@ export function AlertDetailModal({
                 </div>
               )}
 
-              {parsed.actions && (
+              {parsed.actions && parsed.actions.length > 3 && parsed.actions.toLowerCase() !== "none" && !parsed.actions.match(/^(SIGNALS|ANALYSIS|DETECTED|CONFIDENCE):/i) && (
                 <div>
                   <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
                     <Lightbulb className="h-4 w-4 text-green-500" />

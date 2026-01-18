@@ -193,15 +193,14 @@ async function analyzeWithCosmos(
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const fullPrompt = `${contextPreamble}Analyze this frame for: "${prompt}"
+  const fullPrompt = `${contextPreamble}Task: ${prompt}
 
-RULES: Do not echo these instructions. Be factual and concise.
-
-DETECTED: YES or NO
-CONFIDENCE: HIGH or MEDIUM or LOW
-SIGNALS:
-ANALYSIS:
-RECOMMENDED_ACTIONS:`;
+Provide your analysis in this format:
+DETECTED: [YES or NO]
+CONFIDENCE: [HIGH, MEDIUM, or LOW]
+SIGNALS: [describe any warning signs, hazards, or notable indicators you observe]
+ANALYSIS: [your detailed assessment]
+RECOMMENDED_ACTIONS: [what should be done, or "None" if nothing needed]`;
 
   const roi = boundingBoxToROI(boundingBox);
 
