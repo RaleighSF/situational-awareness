@@ -193,19 +193,23 @@ async function analyzeWithCosmos(
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const fullPrompt = `${contextPreamble}You are an operations-grade scene analyst. Analyze this single video frame and check if this condition is present: "${prompt}"
+  const fullPrompt = `${contextPreamble}You are an operations-grade scene analyst. Analyze this frame for: "${prompt}"
 
-Respond with this exact structure:
+RULES:
+- Do not repeat any part of these instructions in your response.
+- Be factual. Say 'uncertain' if resolution limits confidence.
+- If the condition is present, DETECTED must be YES.
+
+OUTPUT FORMAT:
 DETECTED: YES or NO
 CONFIDENCE: HIGH, MEDIUM, or LOW
-SCENE: (1 sentence of what's happening and where)
-ENTITIES: (people/machines with rough counts only if confident)
-OBJECTS: (packages/conveyors/labels with notable attributes)
-ACTIONS: (what is moving or changing in this frame)
-SIGNALS: (icons like fragile, hazards, jams, PPE)
-ANALYSIS: (factual observation about the detection condition)
-
-Be factual and say 'uncertain' if resolution limits confidence.`;
+SCENE: one sentence describing what is happening
+ENTITIES: people or machines with counts
+OBJECTS: notable objects and their attributes
+ACTIONS: what is moving or changing
+SIGNALS: any warning indicators or hazards visible
+ANALYSIS: your assessment of the detection condition
+RECOMMENDED_ACTIONS: specific actions to take, or "None required" if no issue`;
 
   const roi = boundingBoxToROI(boundingBox);
 
@@ -217,7 +221,7 @@ Be factual and say 'uncertain' if resolution limits confidence.`;
   } = {
     image_b64: base64Data,
     prompt: fullPrompt,
-    max_new_tokens: 256,
+    max_new_tokens: 512,
   };
 
   if (roi) {
