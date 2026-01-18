@@ -242,7 +242,14 @@ ANALYSIS: Brief description of what you observe`;
 
     const detected = detectedMatch?.[1]?.toUpperCase() === "YES";
     const confidence = confidenceMatch?.[1]?.toUpperCase() || "MEDIUM";
-    const analysis = analysisMatch?.[1]?.trim() || content;
+    
+    let analysis = analysisMatch?.[1]?.trim() || content;
+    analysis = analysis
+      .replace(/^Brief description of what you observe\s*/i, '')
+      .replace(/^DETECTED:\s*(YES|NO)\s*/i, '')
+      .replace(/^CONFIDENCE:\s*(HIGH|MEDIUM|LOW)\s*/i, '')
+      .replace(/^ANALYSIS:\s*/i, '')
+      .trim();
 
     return { detected, analysis, confidence };
   } catch (error) {
