@@ -6,10 +6,12 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.9 (Current)
-- Auto-persist uploads: Videos now automatically copy to /attached_assets/ on upload
+### v2.0 (Current)
+- Production reset: Each deployment resets prod database to match dev demo state
+- No stale data: All old/duplicate entries cleared on prod startup
+- Dev sync: Development seed removes sources not in demo list
+- Auto-persist uploads: Videos automatically copy to /attached_assets/ on upload
 - Clean filenames: Uploads get sanitized names (e.g., "Parking Lot" → "parking-lot.mp4")
-- No manual steps: Just upload in Development and publish - videos bundle automatically
 - File size limit: Individual videos must be under 50MB for deployment
 
 ### v1.8

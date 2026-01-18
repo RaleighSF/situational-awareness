@@ -21,11 +21,51 @@ const DEMO_VIDEO_SOURCES = [
   { name: "The Newspaper", url: "/attached_assets/newspaper.mp4" },
 ];
 
+// Reset database to canonical demo state - used in production to sync with dev
+export async function resetToDemo(): Promise<void> {
+  console.log("[Reset] Resetting database to demo state...");
+  
+  // Clear all existing data
+  await db.delete(alerts);
+  console.log("[Reset] Cleared alerts");
+  await db.delete(prompts);
+  console.log("[Reset] Cleared prompts");
+  await db.delete(videoSources);
+  console.log("[Reset] Cleared video sources");
+  
+  // Insert canonical demo video sources
+  for (const demo of DEMO_VIDEO_SOURCES) {
+    await db.insert(videoSources).values({
+      name: demo.name,
+      url: demo.url,
+      isActive: true,
+    });
+    console.log(`[Reset] Added: ${demo.name}`);
+  }
+  
+  console.log("[Reset] Database reset complete - ready with demo data");
+}
+
+// Development seed - adds missing sources without clearing existing data
 export async function seedDemoVideoSources(): Promise<void> {
   console.log("[Seed] Syncing demo video sources...");
   const existing = await db.select().from(videoSources);
   const existingByName = new Map(existing.map(s => [s.name, s]));
+  const demoNames = new Set(DEMO_VIDEO_SOURCES.map(d => d.name));
   
+  // Remove sources not in demo list
+  for (const source of existing) {
+    if (!demoNames.has(source.name)) {
+      console.log(`[Seed] Removing stale source: ${source.name}`);
+      await db.delete(alerts).where(inArray(alerts.promptId, 
+        db.select({ id: prompts.id }).from(prompts).where(eq(prompts.videoSourceId, source.id))
+      ));
+      await db.delete(prompts).where(eq(prompts.videoSourceId, source.id));
+      await db.delete(videoSources).where(eq(videoSources.id, source.id));
+    }
+  }
+  
+  // Add or update demo sources
   for (const demo of DEMO_VIDEO_SOURCES) {
     const existingSource = existingByName.get(demo.name);
     if (existingSource) {
