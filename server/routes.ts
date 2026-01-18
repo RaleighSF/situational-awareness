@@ -135,6 +135,19 @@ IMPORTANT RULES:
   return content;
 }
 
+function stripChatMarkers(text: string): string {
+  let cleaned = text
+    .replace(/^#{1,3}\s*(User|Assistant|System):\s*/gim, '')
+    .replace(/^(user|assistant|system):\s*/gim, '')
+    .replace(/<\|?(user|assistant|system|im_start|im_end|end_of_turn)\|?>\n?/gi, '')
+    .replace(/\[INST\]|\[\/INST\]/gi, '')
+    .replace(/<<SYS>>|<<\/SYS>>/gi, '')
+    .replace(/^\s*assistant\s*\n/gim, '')
+    .replace(/^\s*user\s*\n/gim, '')
+    .trim();
+  return cleaned;
+}
+
 interface CosmosROI {
   x: number;
   y: number;
@@ -180,16 +193,12 @@ async function analyzeWithCosmos(
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const fullPrompt = `${contextPreamble}You are a situational awareness AI analyzing security camera footage. Analyze this image and determine if the following condition is present:
+  const fullPrompt = `${contextPreamble}Security camera analysis. Check if this condition is present: "${prompt}"
 
-"${prompt}"
-
-Answer in this exact format:
-DETECTED: [YES/NO]
-CONFIDENCE: [HIGH/MEDIUM/LOW]
-ANALYSIS: [Your detailed analysis of what you observe]
-
-Be concise but thorough. If you detect the specified condition, explain exactly what you see that matches it. If not, explain what you see instead.`;
+Respond with:
+DETECTED: YES or NO
+CONFIDENCE: HIGH, MEDIUM, or LOW
+ANALYSIS: Brief description of what you observe`;
 
   const roi = boundingBoxToROI(boundingBox);
 
@@ -224,14 +233,15 @@ Be concise but thorough. If you detect the specified condition, explain exactly 
     }
 
     const result = await response.json();
-    const content = result.text || "";
+    const rawContent = result.text || "";
+    const content = stripChatMarkers(rawContent);
 
     const detectedMatch = content.match(/DETECTED:\s*(YES|NO)/i);
     const confidenceMatch = content.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
     const analysisMatch = content.match(/ANALYSIS:\s*([\s\S]+)/i);
 
     const detected = detectedMatch?.[1]?.toUpperCase() === "YES";
-    const confidence = confidenceMatch?.[1] || "MEDIUM";
+    const confidence = confidenceMatch?.[1]?.toUpperCase() || "MEDIUM";
     const analysis = analysisMatch?.[1]?.trim() || content;
 
     return { detected, analysis, confidence };
@@ -255,11 +265,9 @@ async function analyzeWithCosmosAdhocDirect(frameData: string, userPrompt: strin
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const prompt = `${contextPreamble}You are a helpful AI assistant analyzing an image. The user has asked:
+  const prompt = `${contextPreamble}Analyze this image. User question: "${userPrompt}"
 
-"${userPrompt}"
-
-Please provide a clear, accurate, and helpful response based on what you observe in the image.`;
+Describe what you observe and answer the question directly.`;
 
   const payload = {
     image_b64: base64Data,
@@ -283,7 +291,8 @@ Please provide a clear, accurate, and helpful response based on what you observe
 
   const apiResult = await response.json();
   console.log(`[COSMOS] <-- API result keys: ${Object.keys(apiResult).join(', ')}`);
-  const content = apiResult.text || apiResult.raw_text || apiResult.result || "";
+  const rawContent = apiResult.text || apiResult.raw_text || apiResult.result || "";
+  const content = stripChatMarkers(rawContent);
   console.log(`[COSMOS] <-- Response: ${content.length} chars`);
   return content;
 }
@@ -325,17 +334,7 @@ async function getBatchSceneObservations(
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const prompt = `${contextPreamble}You are observing a security camera feed. Describe exactly what you see in this frame in a factual, structured way.
-
-Focus on:
-- People: count, positions, activities, direction of movement
-- Vehicles/equipment: type, location, motion (entering/exiting/stationary)
-- Objects: notable items, packages, tools - position and state
-- Actions: what is happening, who is doing what
-
-Note any temporal cues - things entering/exiting frame, people walking toward/away, objects being picked up/set down.
-
-Be detailed and factual. Use bullet points.`;
+  const prompt = `${contextPreamble}Security camera observation. Describe scene state: people (count, positions, actions, movement direction), objects (type, location, state), vehicles/equipment (type, motion), and notable signals or changes. Be concise and factual.`;
 
   const items = frames.map((frameData, index) => {
     const t = index * intervalSeconds;
@@ -389,7 +388,7 @@ Be detailed and factual. Use bullet points.`;
 
     const observations: FrameObservation[] = results.map((r: { t: number; text: string }) => ({
       t: r.t,
-      text: r.text || "No observation generated",
+      text: stripChatMarkers(r.text || "No observation generated"),
     }));
 
     return observations;
@@ -414,32 +413,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     ? `Scene Context from operator: "${sceneContext}"\nUse this context to focus your analysis.\n\n` 
     : "";
 
-  const prompt = `${contextPreamble}Scene Agent Synthesis: Produce an analyst-quality narrative of what unfolded across the window. In summary, explain overall activity and the key takeaway. In events, list 5-8 material moments in time order that capture how the situation evolved (entries/exits, starts/stops, interactions, notable shifts). Use anomalies for unexpected changes or sharp confidence jumps. Use escalations only for conditions that persist/worsen or warrant attention. Output JSON only.
-
-Return JSON ONLY (no markdown, no extra text) using this exact schema:
-{
-  "summary": "3-4 sentences max. What happened overall + key takeaway + context.",
-  "events": [
-    { "t": 0, "description": "<= 18 words" }
-  ],
-  "anomalies": ["<= 14 words each"],
-  "escalations": ["<= 16 words each"],
-  "confidence": 0.0
-}
-
-Quality bar:
-- Focus on situational awareness: actions, interactions, transitions, persistence, intent.
-- Prefer comparative language over static inventories.
-- Include subtle-but-meaningful changes (entries/exits, count changes, starts/stops, proximity shifts, confidence jumps).
-
-Hard limits (must follow):
-- summary: 3-4 sentences max, <= 90 words total.
-- events: MUST be 5 to 8 items, MATERIAL moments only (not every frame).
-  - description: <= 18 words, single sentence.
-  - t is an integer seconds offset into the window.
-- anomalies: 0 to 6 items, each <= 14 words.
-- escalations: 0 to 3 items, each <= 16 words.
-- confidence: number between 0 and 1.`;
+  const prompt = `${contextPreamble}Synthesize these security camera observations into an analyst-quality report. Use clear section headers: Summary, Notable Changes, Persistent Context, Timeline, Anomalies, Confidence. Focus on actions, interactions, transitions, and situational awareness. Be concise.`;
 
   const payload = {
     prompt,
@@ -476,7 +450,8 @@ Hard limits (must follow):
     const parseMs = t2 - t1;
     const totalMs = t2 - t0;
     
-    const rawText = apiResult.raw_text || "";
+    const rawTextUncleaned = apiResult.raw_text || apiResult.text || "";
+    const rawText = stripChatMarkers(rawTextUncleaned);
     const responseChars = rawText.length;
     const responseWords = rawText.split(/\s+/).length;
     
@@ -491,57 +466,76 @@ Hard limits (must follow):
     }
 
     if (rawText) {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          
-          return {
-            synthesis: {
-              summary: parsed.summary || "Analysis complete.",
-              events: Array.isArray(parsed.events) ? parsed.events.map((e: { t?: number; description?: string; rule_id?: string }) => ({
-                t: e.t ?? 0,
-                description: e.description ?? "Observation recorded",
-                rule_id: e.rule_id,
-              })) : [],
-              anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
-              escalations: Array.isArray(parsed.escalations) ? parsed.escalations : [],
-              confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
-            },
-            rawText,
-          };
-        } catch {
-          console.error("Failed to parse synthesis JSON from raw_text, attempting fallback extraction");
-          
-          // Fallback: try to extract summary from truncated JSON
-          const summaryMatch = rawText.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-          if (summaryMatch) {
-            const extractedSummary = summaryMatch[1]
-              .replace(/\\n/g, ' ')
-              .replace(/\\"/g, '"')
-              .replace(/\s+/g, ' ')
-              .trim();
-            
-            // Truncate very long summaries to first few sentences
-            const sentences = extractedSummary.match(/[^.!?]+[.!?]+/g) || [extractedSummary];
-            const truncatedSummary = sentences.slice(0, 4).join(' ').trim();
-            
-            return {
-              synthesis: {
-                summary: truncatedSummary || "Analysis complete but response was truncated.",
-                events: [],
-                anomalies: [],
-                escalations: [],
-                confidence: 0.5,
-              },
-              rawText,
-            };
+      const extractSection = (text: string, headers: string[], nextHeaders: string[]): string => {
+        for (const header of headers) {
+          const headerRegex = new RegExp(`(?:^|\\n)\\s*(?:#{1,3}\\s*)?(?:\\*\\*)?${header}(?:\\*\\*)?:?\\s*`, 'i');
+          const match = text.match(headerRegex);
+          if (match) {
+            const startIdx = match.index! + match[0].length;
+            let endIdx = text.length;
+            for (const next of nextHeaders) {
+              const nextRegex = new RegExp(`(?:^|\\n)\\s*(?:#{1,3}\\s*)?(?:\\*\\*)?${next}(?:\\*\\*)?:?\\s*`, 'i');
+              const nextMatch = text.substring(startIdx).match(nextRegex);
+              if (nextMatch && nextMatch.index !== undefined) {
+                endIdx = Math.min(endIdx, startIdx + nextMatch.index);
+              }
+            }
+            return text.substring(startIdx, endIdx).trim();
           }
         }
+        return "";
+      };
+
+      const allNextHeaders = ['Summary', 'Overview', 'Notable', 'Changes', 'Timeline', 'Events', 'Anomalies', 'Confidence', 'Escalations'];
+      const summary = extractSection(rawText, ['Summary', 'Overview', 'Key Takeaway'], allNextHeaders) || rawText.substring(0, 400);
+      const timeline = extractSection(rawText, ['Timeline', 'Events', 'Key Events', 'Moments'], ['Anomalies', 'Confidence', 'Escalations']);
+      const anomalies = extractSection(rawText, ['Anomalies', 'Anomaly', 'Unusual', 'Unexpected'], ['Confidence', 'Escalations']);
+      const confidenceStr = extractSection(rawText, ['Confidence', 'Certainty'], []);
+      
+      const events: { t: number; description: string }[] = [];
+      const timelineLines = timeline.split(/[\n\r]+/).filter(l => l.trim());
+      for (const line of timelineLines) {
+        const timeMatch = line.match(/(?:t\s*[=:]?\s*)?(\d+)\s*s(?:ec(?:onds?)?)?|(\d{1,2}):(\d{2})/i);
+        let t = events.length * 5;
+        if (timeMatch) {
+          if (timeMatch[1]) {
+            t = parseInt(timeMatch[1]);
+          } else if (timeMatch[2] && timeMatch[3]) {
+            t = parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
+          }
+        }
+        const description = line.replace(/^[-•*]\s*/, '').replace(/(?:t\s*[=:]?\s*)?\d+\s*s(?:ec(?:onds?)?)?\s*[-:–]?\s*/i, '').replace(/\d{1,2}:\d{2}\s*[-:–]?\s*/, '').trim();
+        if (description && description.length > 5) {
+          events.push({ t, description: description.substring(0, 100) });
+        }
       }
+
+      const anomalyList = anomalies.split(/[\n\r]+/).filter(l => l.trim()).map(l => l.replace(/^[-•*]\s*/, '').trim()).filter(l => l.length > 3).slice(0, 6);
+      
+      let confidence = 0.5;
+      const confMatch = confidenceStr.match(/([\d.]+)/);
+      if (confMatch) {
+        const val = parseFloat(confMatch[1]);
+        confidence = val > 1 ? val / 100 : val;
+      } else if (/high/i.test(confidenceStr) || /high/i.test(rawText.substring(rawText.length - 200))) {
+        confidence = 0.85;
+      } else if (/low/i.test(confidenceStr)) {
+        confidence = 0.35;
+      }
+      
+      return {
+        synthesis: {
+          summary: summary.substring(0, 400) || "Analysis complete.",
+          events: events.length > 0 ? events.slice(0, 8) : [{ t: 0, description: "Scene observed" }],
+          anomalies: anomalyList,
+          escalations: [],
+          confidence,
+        },
+        rawText,
+      };
     }
 
-    return { synthesis: null, rawText };
+    return { synthesis: { summary: rawText.substring(0, 400) || "Analysis complete.", events: [], anomalies: [], escalations: [], confidence: 0.5 }, rawText };
   } catch (error) {
     console.error("Error synthesizing observations:", error);
     return { 

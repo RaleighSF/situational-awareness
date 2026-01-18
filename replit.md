@@ -6,7 +6,14 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v2.0 (Current)
+### v2.1 (Current)
+- **Cosmos API update**: Prompts simplified to pure user instructions (no JSON enforcement)
+- Response parsing: Strip chat wrapper tokens (user/assistant markers) from API responses
+- Scene Agent: Parse new section headers format (Summary, Notable Changes, Timeline, Anomalies, Confidence)
+- Batch observations: Concise scene descriptions for better inference quality
+- Ad-hoc analysis: Streamlined prompts for faster responses
+
+### v2.0
 - Production reset: Each deployment resets prod database to match dev demo state
 - No stale data: All old/duplicate entries cleared on prod startup
 - Dev sync: Development seed removes sources not in demo list
