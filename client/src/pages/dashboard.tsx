@@ -7,6 +7,7 @@ import { PromptForm } from "@/components/prompt-form";
 import { AlertList } from "@/components/alert-list";
 import { AlertDetailModal } from "@/components/alert-detail-modal";
 import { AnalysisStatus } from "@/components/analysis-status";
+import { CosmosHealth } from "@/components/cosmos-health";
 import { SceneAgentModal } from "@/components/scene-agent-modal";
 import { QuickAnalysisModal } from "@/components/quick-analysis-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -775,7 +776,8 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <CosmosHealth />
             <Badge variant="outline" className="hidden sm:flex">
               <Video className="h-3 w-3 mr-1" />
               Live Feed

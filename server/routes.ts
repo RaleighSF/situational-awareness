@@ -924,16 +924,34 @@ export async function registerRoutes(
 
   app.get("/api/cosmos/health", async (_req, res) => {
     try {
-      const response = await fetch(`${COSMOS_ENDPOINT}/health`);
+      const response = await fetch(`${COSMOS_ENDPOINT}/health`, {
+        signal: AbortSignal.timeout(5000)
+      });
       if (response.ok) {
-        res.json({ status: "healthy", endpoint: COSMOS_ENDPOINT });
+        const data = await response.json();
+        res.json({ 
+          status: "healthy", 
+          endpoint: COSMOS_ENDPOINT,
+          apiLive: true,
+          modelLoaded: data.model_loaded ?? false,
+          gpu: data.gpu ?? null,
+          modelId: data.model_id ?? null,
+          cuda: data.cuda ?? false
+        });
       } else {
-        res.status(503).json({ status: "unhealthy", endpoint: COSMOS_ENDPOINT });
+        res.status(503).json({ 
+          status: "unhealthy", 
+          endpoint: COSMOS_ENDPOINT,
+          apiLive: true,
+          modelLoaded: false 
+        });
       }
     } catch (error) {
       res.status(503).json({ 
         status: "unavailable", 
         endpoint: COSMOS_ENDPOINT,
+        apiLive: false,
+        modelLoaded: false,
         error: error instanceof Error ? error.message : "Unknown error"
       });
     }

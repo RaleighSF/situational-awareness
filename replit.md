@@ -15,6 +15,7 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 - File size limit: Individual videos must be under 50MB for deployment
 - Canonical demo data: Video sources, settings, and prompts are defined in server/storage.ts
 - Parking lot video converted from MOV to MP4 for better browser compatibility
+- Cosmos API health check: Header shows real-time API status and model load state
 
 ### v1.8
 - Upload/delete buttons hidden in production mode
