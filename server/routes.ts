@@ -16,6 +16,11 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+const ATTACHED_ASSETS_DIR = path.join(process.cwd(), "attached_assets");
+if (!fs.existsSync(ATTACHED_ASSETS_DIR)) {
+  fs.mkdirSync(ATTACHED_ASSETS_DIR, { recursive: true });
+}
+
 const videoStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, UPLOADS_DIR);
@@ -622,7 +627,20 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No video file provided" });
       }
       const name = req.body.name || path.parse(req.file.originalname).name;
-      const videoUrl = `/uploads/${req.file.filename}`;
+      
+      // Create a clean filename from the video name
+      const ext = path.extname(req.file.filename);
+      const cleanName = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+      const persistentFilename = `${cleanName}${ext}`;
+      const persistentPath = path.join(ATTACHED_ASSETS_DIR, persistentFilename);
+      
+      // Copy to attached_assets for deployment persistence
+      fs.copyFileSync(path.join(UPLOADS_DIR, req.file.filename), persistentPath);
+      console.log(`[Upload] Copied video to attached_assets: ${persistentFilename}`);
+      
+      // Use attached_assets URL for persistence across deployments
+      const videoUrl = `/attached_assets/${persistentFilename}`;
+      
       const source = await storage.createVideoSource({
         name,
         url: videoUrl,

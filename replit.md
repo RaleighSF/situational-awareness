@@ -6,7 +6,13 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v1.8 (Current)
+### v1.9 (Current)
+- Auto-persist uploads: Videos now automatically copy to /attached_assets/ on upload
+- Clean filenames: Uploads get sanitized names (e.g., "Parking Lot" → "parking-lot.mp4")
+- No manual steps: Just upload in Development and publish - videos bundle automatically
+- File size limit: Individual videos must be under 50MB for deployment
+
+### v1.8
 - Upload/delete buttons hidden in production mode
 - Videos should be uploaded in Development, then published
 - All video data (sources, prompts, alerts, settings) persists in database across deployments
