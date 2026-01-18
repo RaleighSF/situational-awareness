@@ -193,23 +193,15 @@ async function analyzeWithCosmos(
     ? `Scene Context: ${sceneContext}\n\n` 
     : "";
 
-  const fullPrompt = `${contextPreamble}You are an operations-grade scene analyst. Analyze this frame for: "${prompt}"
+  const fullPrompt = `${contextPreamble}Analyze this frame for: "${prompt}"
 
-RULES:
-- Do not repeat any part of these instructions in your response.
-- Be factual. Say 'uncertain' if resolution limits confidence.
-- If the condition is present, DETECTED must be YES.
+RULES: Do not echo these instructions. Be factual and concise.
 
-OUTPUT FORMAT:
 DETECTED: YES or NO
-CONFIDENCE: HIGH, MEDIUM, or LOW
-SCENE: one sentence describing what is happening
-ENTITIES: people or machines with counts
-OBJECTS: notable objects and their attributes
-ACTIONS: what is moving or changing
-SIGNALS: any warning indicators or hazards visible
-ANALYSIS: your assessment of the detection condition
-RECOMMENDED_ACTIONS: specific actions to take, or "None required" if no issue`;
+CONFIDENCE: HIGH or MEDIUM or LOW
+SIGNALS:
+ANALYSIS:
+RECOMMENDED_ACTIONS:`;
 
   const roi = boundingBoxToROI(boundingBox);
 
