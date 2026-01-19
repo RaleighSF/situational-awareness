@@ -632,7 +632,8 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
 
   // Build synthesis prompt that grounds timeline in actual observations
   const contextStr = sceneContext ? `Scene context: ${sceneContext}\n\n` : "";
-  const synthesisPrompt = `${contextStr}Analyze these temporal observations and create a timeline of events. IMPORTANT: Only include events that are explicitly described in the observations. Do not invent events. Each timeline entry must directly reference something observed in the frames. Focus on changes, actions, and notable occurrences actually visible in the scene.`;
+  const frameCount = observations.length;
+  const synthesisPrompt = `${contextStr}Create a timeline with ${frameCount} entries, one BRIEF event per observation timestamp (t=0, t=4, t=8, etc). Each timeline event should be 10-15 words max describing the key action or change at that moment. Focus on: what changed from the previous frame, notable actions, emerging situations. Do NOT invent events - only describe what is explicitly observed. Keep descriptions concise.`;
 
   const payload = {
     observations: observationsPayload,
