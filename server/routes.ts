@@ -695,18 +695,43 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     if (apiResult.summary === "Synthesis returned non-JSON output." && apiResult.raw) {
       console.log(`[REASON] API parsing failed, attempting to extract JSON from raw field`);
       try {
-        // Strip markdown code blocks: ```json ... ```
+        // Strip markdown code blocks: ```json ... ``` (may be truncated)
         let jsonStr = apiResult.raw;
-        const jsonMatch = jsonStr.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) {
-          jsonStr = jsonMatch[1];
+        
+        // First try complete match
+        const completeMatch = jsonStr.match(/```json\s*([\s\S]*?)\s*```/);
+        if (completeMatch) {
+          jsonStr = completeMatch[1];
         } else {
-          // Try stripping just leading/trailing backticks
-          jsonStr = jsonStr.replace(/^```\w*\s*/, '').replace(/\s*```$/, '');
+          // Handle truncated response - strip opening ```json and any trailing ```
+          jsonStr = jsonStr.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
         }
-        const extracted = JSON.parse(jsonStr);
-        console.log(`[REASON] Successfully parsed JSON from raw field, keys:`, Object.keys(extracted));
-        parsedData = { ...apiResult, ...extracted };
+        
+        // Try to parse, if truncated try to repair by closing open braces
+        let extracted = null;
+        try {
+          extracted = JSON.parse(jsonStr);
+        } catch (parseErr) {
+          // Truncated JSON - try to extract at least the summary field
+          const summaryMatch = jsonStr.match(/"summary"\s*:\s*"([^"]+)"/);
+          if (summaryMatch) {
+            console.log(`[REASON] Extracted summary from truncated JSON: ${summaryMatch[1].substring(0, 50)}...`);
+            extracted = { 
+              summary: summaryMatch[1],
+              timeline: [],
+              changes: [],
+              persistent: [],
+              anomalies: [],
+              escalation: [],
+              confidence: 0.5
+            };
+          }
+        }
+        
+        if (extracted) {
+          console.log(`[REASON] Successfully parsed JSON from raw field, keys:`, Object.keys(extracted));
+          parsedData = { ...apiResult, ...extracted };
+        }
       } catch (e) {
         console.log(`[REASON] Failed to parse JSON from raw field:`, e);
       }
