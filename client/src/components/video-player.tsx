@@ -156,7 +156,8 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
           console.log("[VideoPlayer] Frame capture produced empty data");
           return null;
         }
-        console.log(`[VideoPlayer] Frame: ${destW}x${destH}, ${Math.round(dataUrl.length / 1024)}KB`);
+        const videoTime = video.currentTime.toFixed(2);
+        console.log(`[VideoPlayer] Frame @ video ${videoTime}s: ${destW}x${destH}, ${Math.round(dataUrl.length / 1024)}KB`);
         return dataUrl;
       } catch (error) {
         console.error("[VideoPlayer] Error capturing frame:", error);
