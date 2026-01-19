@@ -6,7 +6,15 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v2.2 (Current)
+### v2.3 (Current)
+- **Schema alignment with Cosmos API v2.0**: Full alignment with server response format
+- Scene Agent synthesis: Now uses `timeline[].event` directly (no conversion)
+- Escalation: Changed from `escalations[]` to `escalation[]` (singular)
+- New `persistent[]` field: Displays stable/unchanged elements in scene
+- Changes section: Shows what evolved, appeared, or disappeared
+- Enhanced analysis cleanup: Strips more echoed prompt text patterns
+
+### v2.2
 - **Cosmos API v2 integration**: Client now sends `mode: "detect"` or `mode: "qa"` to server
 - Detection rules: Server handles prompt templating, client sends raw condition
 - Ad-hoc analysis: Uses `mode: "qa"` for expert visual analyst responses

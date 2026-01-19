@@ -1,0 +1,32 @@
+We now have a “situational awareness” service with three core workflows: (1) single-frame rule detection, (2) single-frame ad-hoc Q&A, and (3) the “wow factor” temporal Scene Agent (batch observations → synthesis). The server supports optional ROI bounding boxes so the client can focus analysis on a specific area of the frame. The server is tuned to keep outputs clean for UI (no “user/assistant” transcript) by decoding only newly generated tokens. For best performance from Replit, prefer batching: capture N frames (e.g., 6 frames across 30s) and call /infer_batch once rather than N individual /infer calls (this avoids Replit’s per-request network overhead). Then call /reason once to synthesize a senior-analyst summary with timeline, changes, anomalies, escalation actions, and confidence.
+
+Endpoints + payloads
+	1.	Rule monitoring (continuous): POST https://cosmos.agentdemos.com/infer with mode="detect". Payload fields:
+
+	•	image_b64: base64 JPEG (data URL prefix OK)
+	•	prompt: the rule text (e.g., “Detect any signs of fire” / “Unauthorized vehicle in loading zone”)
+	•	mode: "detect"
+	•	optional roi: [x1,y1,x2,y2] normalized 0..1
+	•	optional max_new_tokens, max_image_side
+Expected response is structured text:
+DETECTED: YES|NO, CONFIDENCE: HIGH|MEDIUM|LOW, ANALYSIS: … (includes recommended action if detected)
+
+	2.	Ad-hoc analysis (operator question): same /infer endpoint but mode="qa".
+
+	•	prompt: user question (e.g., “How many people are in this area?” / “Is that package unattended?”)
+	•	Response is 2–4 sentences, direct and professional, with brief safety callouts if relevant.
+
+	3.	Scene Agent (temporal awareness):
+
+	•	Call POST https://cosmos.agentdemos.com/infer_batch once with items=[{t, image_b64, roi?}, …] where t is seconds from start. This returns compact observations {t, text}.
+	•	Then call POST https://cosmos.agentdemos.com/reason with observations=[{t, text}, …] plus optional context (what “normal” looks like, rules, site notes) and optional total_seconds.
+Expected /reason returns JSON with: summary, changes, persistent, timeline (events are clean like "Worker enters"; timestamp is in t), anomalies, escalation (explicit action if urgent), and confidence (0..1). Render as: Summary → Changes list → Persistent list → Timeline table → Anomalies/Escalation callout.
+
+ROI / bounding boxes
+Client may send roi: [x1,y1,x2,y2] (normalized 0..1) to crop the frame before inference. If no ROI, send full frame. This is how “monitor only this conveyor section” is implemented.
+
+Performance guidance
+	•	Prefer /infer_batch for Scene Agent (one request + one GPU call) rather than multiple /infer calls.
+	•	Keep frame count moderate (4–6) and max_image_side around 512–768 depending on counting/detail needs.
+	•	If the UI experiences slow calls from Replit, increase concurrency only after batching is used (batching is the biggest win).
+	•	Always show request latency returned by API (latency_ms) for debugging.
