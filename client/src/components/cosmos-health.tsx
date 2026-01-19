@@ -35,7 +35,8 @@ export function CosmosHealth() {
   }
 
   const apiLive = !isError && data?.apiLive;
-  const modelLoaded = data?.modelLoaded;
+  // If API is down, model cannot be ready regardless of stale data
+  const modelLoaded = apiLive && data?.modelLoaded;
 
   return (
     <Tooltip>
