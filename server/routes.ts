@@ -453,6 +453,10 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     const parseMs = t2 - t1;
     const totalMs = t2 - t0;
     
+    // Debug: log the full API response structure
+    console.log(`[REASON] API response keys:`, Object.keys(apiResult));
+    console.log(`[REASON] Full API response:`, JSON.stringify(apiResult).substring(0, 500));
+    
     const rawTextUncleaned = apiResult.raw_text || apiResult.text || "";
     const rawText = stripChatMarkers(rawTextUncleaned);
     const responseChars = rawText.length;
