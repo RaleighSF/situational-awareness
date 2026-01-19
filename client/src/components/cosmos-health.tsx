@@ -56,12 +56,12 @@ export function CosmosHealth() {
             </Badge>
           </div>
           <div className="flex items-center gap-1.5">
-            <Cpu className={`h-3 w-3 ${modelLoaded ? "text-green-500" : "text-yellow-500"}`} />
+            <Cpu className={`h-3 w-3 ${modelLoaded ? "text-green-500" : apiLive ? "text-yellow-500" : "text-red-500"}`} />
             <Badge 
-              variant={modelLoaded ? "default" : "secondary"} 
+              variant={modelLoaded ? "default" : apiLive ? "secondary" : "destructive"} 
               className="text-[10px] px-1.5 py-0"
             >
-              {modelLoaded ? "Model Ready" : "Model Loading"}
+              {modelLoaded ? "Model Ready" : apiLive ? "Model Loading" : "Model Unreachable"}
             </Badge>
           </div>
         </div>
