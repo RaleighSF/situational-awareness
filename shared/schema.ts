@@ -14,7 +14,7 @@ export type BoundingBox = z.infer<typeof boundingBoxSchema>;
 
 export const sourceSettingsSchema = z.object({
   boundingBox: z.union([boundingBoxSchema, z.null()]).optional(),
-  sceneContext: z.string().max(500).optional(),
+  sceneContext: z.string().max(1000).optional(),
 });
 
 export type SourceSettings = z.infer<typeof sourceSettingsSchema>;
@@ -94,7 +94,7 @@ export const sceneAgentRequestSchema = z.object({
   frames: z.array(z.string()).min(1, "At least one frame is required"),
   intervalSeconds: z.number().min(3).max(30).default(4),
   durationSeconds: z.number().min(10).max(120).default(20),
-  sceneContext: z.string().max(500).optional(),
+  sceneContext: z.string().max(1000).optional(),
 });
 
 export const frameObservationSchema = z.object({
