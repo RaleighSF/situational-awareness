@@ -555,7 +555,7 @@ async function getBatchSceneObservations(
   const prompt = `${contextPreamble}Security camera observation. Describe scene state: people (count, positions, actions, movement direction), objects (type, location, state), vehicles/equipment (type, motion), and notable signals or changes. Be concise and factual.`;
 
   const items = frames.map((frameData, index) => {
-    const t = index * intervalSeconds;
+    const t = Math.round(index * intervalSeconds);
     const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
     const image_b64 = dataUrlMatch 
       ? frameData.slice(dataUrlMatch[0].length)
@@ -614,7 +614,7 @@ async function getBatchSceneObservations(
     const totalMs = Date.now() - t0;
     console.error(`[INFER_BATCH] ERROR after ${totalMs}ms:`, error);
     return frames.map((_, index) => ({
-      t: index * intervalSeconds,
+      t: Math.round(index * intervalSeconds),
       text: `Batch observation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     }));
   }
@@ -622,13 +622,13 @@ async function getBatchSceneObservations(
 
 async function synthesizeObservations(observations: FrameObservation[], sceneContext?: string): Promise<{ synthesis: SceneAgentSynthesis | null; rawText: string }> {
   const observationsPayload = observations.map(o => ({
-    t: o.t,
+    t: Math.round(o.t),
     text: o.text,
   }));
 
-  // Calculate total time span from observations
-  const maxT = Math.max(...observations.map(o => o.t));
-  const totalSeconds = maxT > 0 ? maxT : observations.length * 5;
+  // Calculate total time span from observations (must be integer for Cosmos API)
+  const maxT = Math.max(...observations.map(o => Math.round(o.t)));
+  const totalSeconds = Math.round(maxT > 0 ? maxT : observations.length * 5);
 
   // Build synthesis prompt that grounds timeline in actual observations
   const contextStr = sceneContext ? `Scene context: ${sceneContext}\n\n` : "";
@@ -638,7 +638,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
   // Truncate each observation to 3 sentences max to save tokens
   const truncatedObservations = observationsPayload.map(o => {
     const sentences = o.text.split(/(?<=[.!?])\s+/).slice(0, 3);
-    return { t: o.t, text: sentences.join(' ') };
+    return { t: Math.round(o.t), text: sentences.join(' ') };
   });
 
   const payload = {
