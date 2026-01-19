@@ -629,7 +629,7 @@ export default function Dashboard() {
     const intervalSeconds = 4;
     const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1; // 8 frames
     
-    const VISUAL_RECORDING_DURATION = 45;
+    const VISUAL_RECORDING_DURATION = 60;
     const VISUAL_ANALYZING_DURATION = 12;
 
     setIsSceneAgentRunning(true);
@@ -963,7 +963,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <p className="text-white text-lg font-medium mb-2">Recording Scene</p>
-                      <p className="text-white/80 text-2xl font-mono">{sceneAgentElapsed}s / 45s</p>
+                      <p className="text-white/80 text-2xl font-mono">{sceneAgentElapsed}s / 60s</p>
                       <p className="text-white/60 text-sm mt-2">Capturing temporal data...</p>
                     </>
                   ) : sceneAgentPhase === "analyzing" ? (
