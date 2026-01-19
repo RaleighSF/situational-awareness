@@ -630,10 +630,15 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
   const maxT = Math.max(...observations.map(o => o.t));
   const totalSeconds = maxT > 0 ? maxT : observations.length * 5;
 
+  // Build synthesis prompt that grounds timeline in actual observations
+  const contextStr = sceneContext ? `Scene context: ${sceneContext}\n\n` : "";
+  const synthesisPrompt = `${contextStr}Analyze these temporal observations and create a timeline of events. IMPORTANT: Only include events that are explicitly described in the observations. Do not invent events. Each timeline entry must directly reference something observed in the frames. Focus on changes, actions, and notable occurrences actually visible in the scene.`;
+
   const payload = {
     observations: observationsPayload,
     total_seconds: totalSeconds,
     max_new_tokens: 1024,
+    prompt: synthesisPrompt,
   };
 
   const requestBody = JSON.stringify(payload);
