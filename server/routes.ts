@@ -690,12 +690,34 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     
     console.log(`[REASON] body parsed: +${parseMs}ms | TOTAL: ${totalMs}ms | ${responseWords} words, ${responseChars} chars`);
     
+    // If API indicates parsing failed, try to parse JSON from raw field
+    let parsedData = apiResult;
+    if (apiResult.summary === "Synthesis returned non-JSON output." && apiResult.raw) {
+      console.log(`[REASON] API parsing failed, attempting to extract JSON from raw field`);
+      try {
+        // Strip markdown code blocks: ```json ... ```
+        let jsonStr = apiResult.raw;
+        const jsonMatch = jsonStr.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[1];
+        } else {
+          // Try stripping just leading/trailing backticks
+          jsonStr = jsonStr.replace(/^```\w*\s*/, '').replace(/\s*```$/, '');
+        }
+        const extracted = JSON.parse(jsonStr);
+        console.log(`[REASON] Successfully parsed JSON from raw field, keys:`, Object.keys(extracted));
+        parsedData = { ...apiResult, ...extracted };
+      } catch (e) {
+        console.log(`[REASON] Failed to parse JSON from raw field:`, e);
+      }
+    }
+    
     // The API returns synthesis data at root level - use it directly
-    if (apiResult.summary && typeof apiResult.summary === 'string') {
+    if (parsedData.summary && typeof parsedData.summary === 'string') {
       // Parse timeline events (server format: {t, event})
       const timeline: { t: number; event: string }[] = [];
-      if (Array.isArray(apiResult.timeline)) {
-        for (const item of apiResult.timeline) {
+      if (Array.isArray(parsedData.timeline)) {
+        for (const item of parsedData.timeline) {
           const t = typeof item.t === 'number' ? item.t : 0;
           const eventText = item.event || '';
           const event = eventText.replace(/^\d+s?:\s*/, '').trim();
@@ -706,34 +728,32 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
       }
 
       // Handle escalation (singular array from server)
-      const escalation = Array.isArray(apiResult.escalation) 
-        ? apiResult.escalation.filter((e: string) => e && e !== "None")
+      const escalation = Array.isArray(parsedData.escalation) 
+        ? parsedData.escalation.filter((e: string) => e && e !== "None")
         : [];
 
-      const anomalies = Array.isArray(apiResult.anomalies)
-        ? apiResult.anomalies.filter((a: string) => a && a !== "None observed" && a !== "None")
+      const anomalies = Array.isArray(parsedData.anomalies)
+        ? parsedData.anomalies.filter((a: string) => a && a !== "None observed" && a !== "None")
         : [];
 
-      const changes = Array.isArray(apiResult.changes)
-        ? apiResult.changes.filter((c: string) => c && c !== "None")
+      const changes = Array.isArray(parsedData.changes)
+        ? parsedData.changes.filter((c: string) => c && c !== "None")
         : [];
 
-      const persistent = Array.isArray(apiResult.persistent)
-        ? apiResult.persistent.filter((p: string) => p && p !== "None")
+      const persistent = Array.isArray(parsedData.persistent)
+        ? parsedData.persistent.filter((p: string) => p && p !== "None")
         : [];
 
-      const confidence = typeof apiResult.confidence === 'number' 
-        ? Math.min(1, Math.max(0, apiResult.confidence))
+      const confidence = typeof parsedData.confidence === 'number' 
+        ? Math.min(1, Math.max(0, parsedData.confidence))
         : 0.5;
 
-      // Check if the summary indicates a parsing error from the API
-      const summaryText = apiResult.summary === "Synthesis returned non-JSON output." 
-        ? "Scene analysis complete."
-        : apiResult.summary;
+      // Use extracted summary if available
+      const summaryText = parsedData.summary;
 
-      console.log(`[REASON] Using root-level synthesis: ${summaryText.substring(0, 80)}...`);
+      console.log(`[REASON] Using synthesis: ${summaryText.substring(0, 80)}...`);
       
-      // If timeline is empty/insufficient, generate from observations
+      // If timeline is empty/insufficient, generate from observations as fallback
       let finalTimeline = timeline.length >= 4 ? timeline.slice(0, 8) : [];
       if (finalTimeline.length < 4 && observations.length > 0) {
         console.log(`[REASON] Timeline insufficient (${timeline.length}), generating from observations`);
