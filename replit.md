@@ -10,13 +10,13 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 - **Mark Count mode**: OpenAI-powered classification routes counting queries to `/infer` with `mode="mark_count"`
 - Counting intent detection: "How many...", "Count the...", "Number of...", inventory-style questions
 - Structured count responses: Returns count, items with labels/confidence, and optional notes
-- ROI support: Passes bounding box as `[x1, y1, x2, y2]` normalized array for focused counting
 - Non-counting queries (descriptions, reasoning, summaries) route to `mode="qa"`
 - **Cosmos API v2 integration**: Full alignment with server response format
 - Scene Agent improvements: Timeline events, persistent elements, changes tracking, escalation handling
 - Production stability: Database reset on deployment, canonical demo data, improved video handling
 - Quick Frame Analysis: Camera icon opens modal for ad-hoc questions about captured frames
 - Source-specific profiles: Each video source maintains independent detection rules and settings
+- **ROI fix**: Fixed double-cropping bug where client-cropped frames were also getting ROI applied by Cosmos
 
 ### v1.2
 - Video upload capability: Users can upload MP4, WebM, OGG, or QuickTime videos (max 100MB)

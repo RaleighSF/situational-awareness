@@ -1191,12 +1191,6 @@ export default function Dashboard() {
         }}
         frameData={quickAnalysisFrame}
         sceneContext={sceneAgentContext}
-        roi={currentBoundingBox ? [
-          currentBoundingBox.x / 100, 
-          currentBoundingBox.y / 100, 
-          (currentBoundingBox.x + currentBoundingBox.width) / 100, 
-          (currentBoundingBox.y + currentBoundingBox.height) / 100
-        ] : undefined}
       />
 
       <Dialog open={isUploadDialogOpen} onOpenChange={(open) => !open && handleUploadCancel()}>

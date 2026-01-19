@@ -29,10 +29,9 @@ interface QuickAnalysisModalProps {
   onClose: () => void;
   frameData: string | null;
   sceneContext?: string;
-  roi?: [number, number, number, number];
 }
 
-export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext, roi }: QuickAnalysisModalProps) {
+export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }: QuickAnalysisModalProps) {
   const [prompt, setPrompt] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [response, setResponse] = useState<string | null>(null);
@@ -75,7 +74,7 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext, r
     try {
       const res = await fetch("/api/analyze-adhoc", {
         method: "POST",
-        body: JSON.stringify({ frameData, prompt: prompt.trim(), sceneContext, roi }),
+        body: JSON.stringify({ frameData, prompt: prompt.trim(), sceneContext }),
         headers: { "Content-Type": "application/json" },
       });
       

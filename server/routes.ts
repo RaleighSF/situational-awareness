@@ -1187,7 +1187,9 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Prompt not found" });
       }
 
-      const result = await analyzeWithCosmos(frameData, prompt.prompt, prompt.boundingBox, sceneContext);
+      // Note: Don't pass boundingBox here - the client already cropped the image to the ROI
+      // Passing boundingBox would cause double-cropping since Cosmos would try to crop an already-cropped image
+      const result = await analyzeWithCosmos(frameData, prompt.prompt, null, sceneContext);
 
       let alertCreated = false;
       if (result.detected) {
