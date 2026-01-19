@@ -43,7 +43,7 @@ export function SceneAgentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] p-0 overflow-hidden" data-testid="scene-agent-modal">
+      <DialogContent className="max-w-2xl max-h-[90vh] p-0 overflow-hidden" data-testid="scene-agent-modal">
         <DialogHeader className="px-6 pt-6 pb-4">
           <div className="flex items-center justify-between gap-4">
             <DialogTitle className="text-xl font-semibold">
@@ -84,7 +84,7 @@ export function SceneAgentModal({
           </p>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(85vh-100px)]">
+        <ScrollArea className="max-h-[calc(90vh-100px)]">
           <div className="px-6 pb-6 space-y-6">
             {hasValidSynthesis && synthesis.summary && (
               <div data-testid="scene-agent-summary">
