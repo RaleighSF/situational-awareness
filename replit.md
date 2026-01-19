@@ -17,6 +17,7 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 - Quick Frame Analysis: Camera icon opens modal for ad-hoc questions about captured frames
 - Source-specific profiles: Each video source maintains independent detection rules and settings
 - **ROI fix**: Fixed double-cropping bug where client-cropped frames were also getting ROI applied by Cosmos
+- **Smart Sampling**: Scene Agent waits for video loop restart, samples frames evenly across actual video duration (capped at 32s), ensuring chronological frame sequence
 
 ### v1.2
 - Video upload capability: Users can upload MP4, WebM, OGG, or QuickTime videos (max 100MB)
@@ -50,7 +51,7 @@ This application demonstrates how AI-powered vision analysis can automate securi
 - **Configurable Frequency**: Set how often each rule should be analyzed (5-300 seconds)
 - **Real-time Alerts**: Get notified when the AI detects conditions matching your rules
 - **Alert History**: View past detections with frame captures and analysis details
-- **Scene Agent**: Temporal reasoning analysis that captures 6 frames over 20 seconds, processes them via batch inference, and synthesizes a structured report with summary, timeline events, anomalies, and escalations
+- **Scene Agent**: Temporal reasoning analysis with smart sampling - waits for video loop restart, captures 8 frames evenly spaced across the actual video duration (capped at 32s), processes them via batch inference, and synthesizes a structured report with summary, timeline events, anomalies, and escalations
 
 ## Technology Stack
 

@@ -6,6 +6,9 @@ import { BoundingBox } from "@shared/schema";
 
 export interface VideoPlayerRef {
   captureFrame: (boundingBox?: BoundingBox | null) => string | null;
+  getVideoDuration: () => number;
+  getCurrentTime: () => number;
+  waitForLoopRestart: () => Promise<void>;
 }
 
 interface VideoPlayerProps {
@@ -165,9 +168,71 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
       }
     }, [currentBox]);
 
+    const getVideoDuration = useCallback(() => {
+      return videoRef.current?.duration || 0;
+    }, []);
+
+    const getCurrentTime = useCallback(() => {
+      return videoRef.current?.currentTime || 0;
+    }, []);
+
+    const waitForLoopRestart = useCallback(() => {
+      return new Promise<void>((resolve) => {
+        const video = videoRef.current;
+        if (!video) {
+          resolve();
+          return;
+        }
+
+        // If video is near the start (within 0.5s), consider it already restarted
+        if (video.currentTime < 0.5) {
+          resolve();
+          return;
+        }
+
+        const duration = video.duration || 60;
+        let resolved = false;
+        let timeoutId: ReturnType<typeof setTimeout>;
+        
+        const cleanup = () => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutId);
+            video.removeEventListener('ended', handleEnded);
+            video.removeEventListener('timeupdate', handleTimeUpdate);
+            resolve();
+          }
+        };
+
+        // Listen for the 'ended' event which fires when video completes (before loop)
+        const handleEnded = () => {
+          setTimeout(cleanup, 50);
+        };
+
+        // Fallback: detect when currentTime wraps back to near 0
+        const handleTimeUpdate = () => {
+          if (video.currentTime < 0.5 && !resolved) {
+            cleanup();
+          }
+        };
+
+        // Timeout fallback: if no loop detected within video duration + 2s, proceed anyway
+        timeoutId = setTimeout(() => {
+          console.log('[VideoPlayer] waitForLoopRestart timeout, proceeding');
+          cleanup();
+        }, (duration + 2) * 1000);
+
+        video.addEventListener('ended', handleEnded);
+        video.addEventListener('timeupdate', handleTimeUpdate);
+      });
+    }, []);
+
     useImperativeHandle(ref, () => ({
       captureFrame: captureFrameWithBox,
-    }), [captureFrameWithBox]);
+      getVideoDuration,
+      getCurrentTime,
+      waitForLoopRestart,
+    }), [captureFrameWithBox, getVideoDuration, getCurrentTime, waitForLoopRestart]);
 
     const handleCaptureClick = () => {
       const frameData = captureFrameWithBox();

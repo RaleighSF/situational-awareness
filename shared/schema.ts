@@ -125,6 +125,8 @@ export const sceneAgentResultSchema = z.object({
   startTime: z.string(),
   endTime: z.string(),
   frameCount: z.number(),
+  intervalSeconds: z.number().optional(), // Interval between frames in seconds
+  durationSeconds: z.number().optional(), // Total video sampling duration in seconds
 });
 
 export type SceneAgentConfig = z.infer<typeof sceneAgentConfigSchema>;

@@ -35,10 +35,16 @@ export function SceneAgentModal({
   const hasValidSynthesis = synthesis !== null;
 
   const formatTimeRange = () => {
-    const start = new Date(result.startTime);
-    const end = new Date(result.endTime);
-    const duration = Math.round((end.getTime() - start.getTime()) / 1000);
-    return `${result.frameCount} frames over ${duration} seconds`;
+    // Use actual video sampling duration if available, otherwise fall back to wall-clock time
+    const duration = result.durationSeconds 
+      ? Math.round(result.durationSeconds)
+      : Math.round((new Date(result.endTime).getTime() - new Date(result.startTime).getTime()) / 1000);
+    
+    const interval = result.intervalSeconds 
+      ? `sampled every ${result.intervalSeconds.toFixed(1)}s`
+      : '';
+    
+    return `${result.frameCount} frames over ${duration}s${interval ? ` (${interval})` : ''}`;
   };
 
   return (

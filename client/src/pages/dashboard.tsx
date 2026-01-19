@@ -634,11 +634,9 @@ export default function Dashboard() {
   };
 
   const startSceneAgent = async () => {
-    const durationSeconds = 28;
-    const intervalSeconds = 4;
-    const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1; // 8 frames
-    
-    const VISUAL_RECORDING_DURATION = 60;
+    // Configurable smart sampling parameters
+    const FRAME_COUNT = 8; // Number of frames to capture
+    const MAX_DURATION_SECONDS = 32; // Cap video sampling at 32 seconds
     const VISUAL_ANALYZING_DURATION = 12;
 
     setIsSceneAgentRunning(true);
@@ -647,6 +645,7 @@ export default function Dashboard() {
     sceneAgentFramesRef.current = [];
 
     try {
+      // Verify video is ready
       const initialFrame = videoPlayerRef.current?.captureFrame(null);
       if (!initialFrame) {
         toast({
@@ -660,47 +659,75 @@ export default function Dashboard() {
         return;
       }
 
-      const recordingStartTime = Date.now();
-      let apiPromise: Promise<Response> | null = null;
-      let framesReady = false;
+      // Get video duration for smart sampling
+      const videoDuration = videoPlayerRef.current?.getVideoDuration() || 0;
+      if (videoDuration <= 0) {
+        toast({
+          title: "Video duration unknown",
+          description: "Could not determine video length. Please try again.",
+          variant: "destructive",
+        });
+        setIsSceneAgentRunning(false);
+        setSceneAgentPhase(null);
+        setSceneAgentProgress("");
+        return;
+      }
 
-      const captureFrames = async () => {
-        for (let i = 0; i < frameCount; i++) {
-          const frameData = videoPlayerRef.current?.captureFrame(currentBoundingBox);
-          if (frameData) {
-            sceneAgentFramesRef.current.push(frameData);
-            console.log(`[Scene Agent] Captured frame ${i + 1}/${frameCount}, size: ${Math.round(frameData.length / 1024)}KB`);
-          } else {
-            console.log(`[Scene Agent] Frame ${i + 1}/${frameCount} capture failed - video not ready`);
-          }
-
-          if (i < frameCount - 1) {
-            await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
-          }
-        }
-        framesReady = true;
-        
-        if (sceneAgentFramesRef.current.length > 0) {
-          apiPromise = apiRequest("POST", "/api/scene-agent/run", {
-            frames: sceneAgentFramesRef.current,
-            intervalSeconds,
-            durationSeconds,
-            sceneContext: sceneAgentContext || undefined,
-          });
-        }
-      };
-
-      captureFrames();
-
-      const updateElapsed = () => {
-        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
-        setSceneAgentElapsed(Math.min(elapsed, VISUAL_RECORDING_DURATION));
-      };
+      // Calculate effective sampling duration (capped at MAX_DURATION_SECONDS, min 10s for schema)
+      const MIN_DURATION_SECONDS = 10;
+      const effectiveDuration = Math.max(MIN_DURATION_SECONDS, Math.min(videoDuration, MAX_DURATION_SECONDS));
       
-      const elapsedInterval = setInterval(updateElapsed, 1000);
+      // Ensure at least 2 frames to avoid division by zero
+      const frameCount = Math.max(2, FRAME_COUNT);
+      
+      // Calculate interval between frames (evenly spaced across video)
+      const intervalSeconds = effectiveDuration / (frameCount - 1);
+      
+      console.log(`[Scene Agent] Smart sampling: video=${videoDuration.toFixed(1)}s, effective=${effectiveDuration.toFixed(1)}s, interval=${intervalSeconds.toFixed(2)}s, frames=${frameCount}`);
 
-      await new Promise(resolve => setTimeout(resolve, VISUAL_RECORDING_DURATION * 1000));
+      const recordingStartTime = Date.now();
+      
+      // Start elapsed timer immediately for UI feedback
+      const elapsedInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+        setSceneAgentElapsed(elapsed);
+      }, 1000);
+
+      // Wait for video to loop back to beginning for chronological sampling
+      console.log(`[Scene Agent] Waiting for video loop restart...`);
+      await videoPlayerRef.current?.waitForLoopRestart();
+      console.log(`[Scene Agent] Video restarted, beginning frame capture`);
+
+      // Capture frames evenly spaced across the video
+      let apiPromise: Promise<Response> | null = null;
+      
+      for (let i = 0; i < frameCount; i++) {
+        const frameData = videoPlayerRef.current?.captureFrame(currentBoundingBox);
+        if (frameData) {
+          sceneAgentFramesRef.current.push(frameData);
+          const currentVideoTime = videoPlayerRef.current?.getCurrentTime() || 0;
+          console.log(`[Scene Agent] Captured frame ${i + 1}/${frameCount} at video time ${currentVideoTime.toFixed(2)}s, size: ${Math.round(frameData.length / 1024)}KB`);
+        } else {
+          console.log(`[Scene Agent] Frame ${i + 1}/${frameCount} capture failed - video not ready`);
+        }
+
+        // Wait for next frame interval (except after last frame)
+        if (i < frameCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+        }
+      }
+      
       clearInterval(elapsedInterval);
+      
+      // Start API call immediately after all frames captured
+      if (sceneAgentFramesRef.current.length > 0) {
+        apiPromise = apiRequest("POST", "/api/scene-agent/run", {
+          frames: sceneAgentFramesRef.current,
+          intervalSeconds: Math.round(intervalSeconds * 10) / 10, // Round to 1 decimal
+          durationSeconds: Math.round(effectiveDuration),
+          sceneContext: sceneAgentContext || undefined,
+        });
+      }
 
       if (sceneAgentFramesRef.current.length === 0) {
         toast({
@@ -726,8 +753,8 @@ export default function Dashboard() {
       if (!apiPromise) {
         apiPromise = apiRequest("POST", "/api/scene-agent/run", {
           frames: sceneAgentFramesRef.current,
-          intervalSeconds,
-          durationSeconds,
+          intervalSeconds: Math.round(intervalSeconds * 10) / 10,
+          durationSeconds: Math.round(effectiveDuration),
           sceneContext: sceneAgentContext || undefined,
         });
       }

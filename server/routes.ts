@@ -1360,6 +1360,8 @@ export async function registerRoutes(
         startTime,
         endTime,
         frameCount: frames.length,
+        intervalSeconds,
+        durationSeconds,
       };
 
       console.log(`[Scene Agent] Analysis complete`);
