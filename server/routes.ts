@@ -481,26 +481,25 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
           
-          // Convert server format to our schema format
-          const events: { t: number; description: string }[] = [];
+          // Parse timeline events (server format: {t, event})
+          const timeline: { t: number; event: string }[] = [];
           if (Array.isArray(parsed.timeline)) {
             for (const item of parsed.timeline) {
               const t = typeof item.t === 'number' ? item.t : 0;
-              // Server uses "event" field, we use "description"
-              const eventText = item.event || item.description || '';
+              const eventText = item.event || '';
               // Strip timestamp prefix from event text (e.g., "0s: Worker enters" → "Worker enters")
-              const description = eventText.replace(/^\d+s?:\s*/, '').trim();
-              if (description) {
-                events.push({ t, description: description.substring(0, 150) });
+              const event = eventText.replace(/^\d+s?:\s*/, '').trim();
+              if (event) {
+                timeline.push({ t, event: event.substring(0, 150) });
               }
             }
           }
 
-          // Handle "escalation" (singular) vs "escalations" (plural)
-          const escalations = Array.isArray(parsed.escalations) 
-            ? parsed.escalations.filter((e: string) => e && e !== "None")
-            : Array.isArray(parsed.escalation)
-              ? parsed.escalation.filter((e: string) => e && e !== "None")
+          // Handle escalation (singular array from server)
+          const escalation = Array.isArray(parsed.escalation) 
+            ? parsed.escalation.filter((e: string) => e && e !== "None")
+            : Array.isArray(parsed.escalations)
+              ? parsed.escalations.filter((e: string) => e && e !== "None")
               : [];
 
           const anomalies = Array.isArray(parsed.anomalies)
@@ -511,6 +510,10 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
             ? parsed.changes.filter((c: string) => c && c !== "None")
             : [];
 
+          const persistent = Array.isArray(parsed.persistent)
+            ? parsed.persistent.filter((p: string) => p && p !== "None")
+            : [];
+
           const confidence = typeof parsed.confidence === 'number' 
             ? Math.min(1, Math.max(0, parsed.confidence))
             : 0.5;
@@ -518,10 +521,11 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
           return {
             synthesis: {
               summary: (parsed.summary || "Analysis complete.").substring(0, 400),
-              events: events.length > 0 ? events.slice(0, 8) : [{ t: 0, description: "Scene observed" }],
+              timeline: timeline.length > 0 ? timeline.slice(0, 8) : [{ t: 0, event: "Scene observed" }],
               changes,
+              persistent,
               anomalies,
-              escalations,
+              escalation,
               confidence,
             },
             rawText,
@@ -535,17 +539,18 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
       return {
         synthesis: {
           summary: rawText.substring(0, 400) || "Analysis complete.",
-          events: [{ t: 0, description: "Scene observed" }],
+          timeline: [{ t: 0, event: "Scene observed" }],
           changes: [],
+          persistent: [],
           anomalies: [],
-          escalations: [],
+          escalation: [],
           confidence: 0.5,
         },
         rawText,
       };
     }
 
-    return { synthesis: { summary: "Analysis complete.", events: [], changes: [], anomalies: [], escalations: [], confidence: 0.5 }, rawText };
+    return { synthesis: { summary: "Analysis complete.", timeline: [], changes: [], persistent: [], anomalies: [], escalation: [], confidence: 0.5 }, rawText };
   } catch (error) {
     console.error("Error synthesizing observations:", error);
     return { 

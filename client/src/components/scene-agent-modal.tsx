@@ -94,18 +94,18 @@ export function SceneAgentModal({
               </div>
             )}
 
-            {hasValidSynthesis && (synthesis.anomalies.length > 0 || synthesis.escalations.length > 0) && (
+            {hasValidSynthesis && (synthesis.anomalies.length > 0 || synthesis.escalation.length > 0) && (
               <>
                 <Separator />
                 <div className="space-y-4">
-                  {synthesis.escalations.length > 0 && (
+                  {synthesis.escalation.length > 0 && (
                     <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 p-4">
                       <div className="flex items-center gap-2 mb-3">
                         <AlertOctagon className="h-4 w-4 text-red-600 dark:text-red-400" />
                         <h3 className="font-medium text-red-900 dark:text-red-100">Requires Attention</h3>
                       </div>
                       <ul className="space-y-2">
-                        {synthesis.escalations.map((item, i) => (
+                        {synthesis.escalation.map((item, i) => (
                           <li key={i} className="text-sm text-red-800 dark:text-red-200 flex items-start gap-2">
                             <span className="text-red-500 mt-0.5">•</span>
                             <span>{item}</span>
@@ -119,7 +119,7 @@ export function SceneAgentModal({
                     <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 p-4">
                       <div className="flex items-center gap-2 mb-3">
                         <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                        <h3 className="font-medium text-amber-900 dark:text-amber-100">Notable Changes</h3>
+                        <h3 className="font-medium text-amber-900 dark:text-amber-100">Anomalies</h3>
                       </div>
                       <ul className="space-y-2">
                         {synthesis.anomalies.map((item, i) => (
@@ -136,7 +136,41 @@ export function SceneAgentModal({
             )}
 
 
-            {hasValidSynthesis && synthesis.events.length > 0 && (
+            {hasValidSynthesis && (synthesis.changes.length > 0 || synthesis.persistent.length > 0) && (
+              <>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {synthesis.changes.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-2">Changes Detected</h4>
+                      <ul className="space-y-1">
+                        {synthesis.changes.map((item, i) => (
+                          <li key={i} className="text-sm flex items-start gap-2">
+                            <span className="text-blue-500 mt-0.5">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {synthesis.persistent.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-2">Stable Elements</h4>
+                      <ul className="space-y-1">
+                        {synthesis.persistent.map((item, i) => (
+                          <li key={i} className="text-sm flex items-start gap-2 text-muted-foreground">
+                            <span className="text-green-500 mt-0.5">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {hasValidSynthesis && synthesis.timeline.length > 0 && (
               <>
                 <Separator />
                 <div>
@@ -147,17 +181,17 @@ export function SceneAgentModal({
                   <div className="relative">
                     <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
                     <div className="space-y-4">
-                      {synthesis.events.map((event, index) => {
-                        const matchingObs = result.observations.find(o => o.t === event.t);
+                      {synthesis.timeline.map((timelineEvent, index) => {
+                        const matchingObs = result.observations.find(o => o.t === timelineEvent.t);
                         return (
                           <div key={index} className="relative pl-6" data-testid={`timeline-entry-${index}`}>
                             <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full bg-background border-2 border-muted-foreground" />
                             <div>
                               <span className="text-xs font-medium text-foreground">
-                                T+{event.t}s
+                                T+{timelineEvent.t}s
                               </span>
                               <p className="text-sm text-muted-foreground mt-1">
-                                {event.description}
+                                {timelineEvent.event}
                               </p>
                               {matchingObs && (
                                 <Collapsible>
