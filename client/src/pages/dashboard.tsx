@@ -55,6 +55,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { Prompt, Alert, BoundingBox, SceneAgentResult, VideoSource, SourceSettings } from "@shared/schema";
 
+// Protected demo video URLs that cannot be deleted
+const PROTECTED_DEMO_URLS = [
+  "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4",
+  "/attached_assets/product-picking.mp4",
+  "/attached_assets/engine-assembly.mp4",
+  "/attached_assets/parking-lot.mp4",
+  "/attached_assets/newspaper.mp4",
+];
+
 interface PromptSchedule {
   promptId: string;
   frequency: number;
@@ -914,7 +923,7 @@ export default function Dashboard() {
                       <Upload className="h-4 w-4" />
                     )}
                   </Button>
-                  {currentSource && !currentSource.url.startsWith("/attached_assets/") && (
+                  {currentSource && !PROTECTED_DEMO_URLS.includes(currentSource.url) && (
                     <Button
                       variant="outline"
                       size="icon"
