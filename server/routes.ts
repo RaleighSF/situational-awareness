@@ -240,11 +240,20 @@ async function analyzeWithCosmos(
     const confidence = confidenceMatch?.[1]?.toUpperCase() || "MEDIUM";
     
     let analysis = analysisMatch?.[1]?.trim() || content;
+    // Strip echoed prompt instructions that the model sometimes repeats
     analysis = analysis
       .replace(/^Brief description of what you observe\s*/i, '')
+      .replace(/^\d+-\d+\s+sentences\s+explaining[^.]+\.\s*/i, '')
+      .replace(/^Be\s+direct\.\s*Do\s+not\s+include[^.]+\.\s*/i, '')
+      .replace(/^Examine\s+the\s+image[^.]+\.\s*/i, '')
+      .replace(/^Report\s+in\s+this\s+exact\s+format[^:]*:\s*/i, '')
       .replace(/^DETECTED:\s*(YES|NO)\s*/i, '')
       .replace(/^CONFIDENCE:\s*(HIGH|MEDIUM|LOW)\s*/i, '')
       .replace(/^ANALYSIS:\s*/i, '')
+      .replace(/\n*DETECTED:\s*(YES|NO)\s*/i, '\n')
+      .replace(/\n*CONFIDENCE:\s*(HIGH|MEDIUM|LOW)\s*/i, '\n')
+      .replace(/\n*ANALYSIS:\s*/i, '\n')
+      .replace(/^\s*\n+/, '')
       .trim();
 
     return { detected, analysis, confidence };
