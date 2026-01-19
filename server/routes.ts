@@ -392,6 +392,7 @@ async function analyzeWithCosmosMarkCount(
 
   const targetUrl = `${COSMOS_ENDPOINT}/infer`;
   console.log(`[MARK_COUNT] --> ${targetUrl}`);
+  console.log(`[MARK_COUNT] Image size: ${base64Data.length} chars, prompt: "${questionWithContext.substring(0, 50)}..."`);
 
   const response = await fetch(targetUrl, {
     method: "POST",
