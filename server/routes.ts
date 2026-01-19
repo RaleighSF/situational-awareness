@@ -148,21 +148,17 @@ function stripChatMarkers(text: string): string {
   return cleaned;
 }
 
-interface CosmosROI {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+// ROI format for Cosmos API: [x1, y1, x2, y2] normalized 0..1
+type CosmosROI = [number, number, number, number];
 
 function boundingBoxToROI(boundingBox: BoundingBox | null): CosmosROI | undefined {
   if (!boundingBox) return undefined;
-  return {
-    x: boundingBox.x / 100,
-    y: boundingBox.y / 100,
-    w: boundingBox.width / 100,
-    h: boundingBox.height / 100,
-  };
+  // Convert from {x, y, width, height} percentage to [x1, y1, x2, y2] normalized
+  const x1 = boundingBox.x / 100;
+  const y1 = boundingBox.y / 100;
+  const x2 = (boundingBox.x + boundingBox.width) / 100;
+  const y2 = (boundingBox.y + boundingBox.height) / 100;
+  return [x1, y1, x2, y2];
 }
 
 async function analyzeWithCosmos(
