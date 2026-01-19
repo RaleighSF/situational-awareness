@@ -675,10 +675,14 @@ export default function Dashboard() {
 
       // Calculate effective sampling duration (capped at MAX_DURATION_SECONDS, min 10s for schema)
       const MIN_DURATION_SECONDS = 10;
+      const MIN_INTERVAL_SECONDS = 3; // Cosmos API requires intervalSeconds >= 3
       const effectiveDuration = Math.max(MIN_DURATION_SECONDS, Math.min(videoDuration, MAX_DURATION_SECONDS));
       
-      // Ensure at least 2 frames to avoid division by zero
-      const frameCount = Math.max(2, FRAME_COUNT);
+      // Calculate max frames allowed to maintain minimum interval
+      // intervalSeconds = effectiveDuration / (frameCount - 1) >= MIN_INTERVAL_SECONDS
+      // So frameCount <= (effectiveDuration / MIN_INTERVAL_SECONDS) + 1
+      const maxFramesForInterval = Math.floor(effectiveDuration / MIN_INTERVAL_SECONDS) + 1;
+      const frameCount = Math.max(2, Math.min(FRAME_COUNT, maxFramesForInterval));
       
       // Calculate interval between frames (evenly spaced across video)
       const intervalSeconds = effectiveDuration / (frameCount - 1);
