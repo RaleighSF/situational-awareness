@@ -565,7 +565,7 @@ async function getBatchSceneObservations(
 
   const payload = {
     prompt,
-    max_new_tokens: 160,
+    max_new_tokens: 256,
     max_image_side: 512,
     items,
   };
@@ -633,7 +633,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
   const payload = {
     observations: observationsPayload,
     total_seconds: totalSeconds,
-    max_new_tokens: 768,
+    max_new_tokens: 1024,
   };
 
   const requestBody = JSON.stringify(payload);
