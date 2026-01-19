@@ -405,13 +405,58 @@ async function analyzeWithCosmosMarkCount(
   }
 
   const apiResult = await response.json();
-  console.log(`[MARK_COUNT] <-- API result:`, JSON.stringify(apiResult).substring(0, 300));
+  console.log(`[MARK_COUNT] <-- API result:`, JSON.stringify(apiResult).substring(0, 500));
 
-  return {
-    count: apiResult.count ?? 0,
-    items: apiResult.items ?? [],
-    notes: apiResult.notes,
+  // Cosmos mark_count may return data in different formats:
+  // 1. Direct: { count: N, items: [...] }
+  // 2. Wrapped: { text: "{ count: N, ... }" } (JSON string in text field)
+  // 3. Text response: { text: "There are N items..." } (natural language)
+  
+  let count = 0;
+  let items: CountItem[] = [];
+  let notes: string | undefined;
+
+  // Helper to normalize items to CountItem format
+  const normalizeItems = (rawItems: unknown[]): CountItem[] => {
+    return rawItems.map((item: any, idx: number) => ({
+      id: item.id ?? idx + 1,
+      label: item.label ?? `Item ${idx + 1}`,
+      confidence: item.confidence ?? 0.5,
+      box: item.box ?? [0, 0, 1, 1],
+    }));
   };
+
+  // Try direct count field first
+  if (typeof apiResult.count === 'number') {
+    count = apiResult.count;
+    items = normalizeItems(apiResult.items || []);
+    notes = apiResult.notes;
+  } 
+  // Try parsing text field as JSON
+  else if (apiResult.text) {
+    const textContent = stripChatMarkers(apiResult.text);
+    try {
+      const parsed = JSON.parse(textContent);
+      count = parsed.count ?? 0;
+      items = normalizeItems(parsed.items || []);
+      notes = parsed.notes;
+    } catch {
+      // Text field contains natural language - parse for count
+      const countMatch = textContent.match(/(\d+)/);
+      count = countMatch ? parseInt(countMatch[1], 10) : 0;
+      notes = textContent;
+    }
+  }
+  // Try raw_text or result fields
+  else if (apiResult.raw_text || apiResult.result) {
+    const textContent = stripChatMarkers(apiResult.raw_text || apiResult.result);
+    const countMatch = textContent.match(/(\d+)/);
+    count = countMatch ? parseInt(countMatch[1], 10) : 0;
+    notes = textContent;
+  }
+
+  console.log(`[MARK_COUNT] Parsed: count=${count}, items=${items.length}`);
+  return { count, items, notes };
 }
 
 async function analyzeWithCosmosAdhocDirect(frameData: string, userPrompt: string, sceneContext?: string): Promise<string> {
