@@ -625,12 +625,12 @@ export default function Dashboard() {
   };
 
   const startSceneAgent = async () => {
-    const durationSeconds = 20;
+    const durationSeconds = 28;
     const intervalSeconds = 4;
-    const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1;
+    const frameCount = Math.floor(durationSeconds / intervalSeconds) + 1; // 8 frames
     
-    const VISUAL_RECORDING_DURATION = 30;
-    const VISUAL_ANALYZING_DURATION = 10;
+    const VISUAL_RECORDING_DURATION = 38;
+    const VISUAL_ANALYZING_DURATION = 12;
 
     setIsSceneAgentRunning(true);
     setSceneAgentPhase("recording");
