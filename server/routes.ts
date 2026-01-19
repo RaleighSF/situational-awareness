@@ -263,6 +263,157 @@ async function analyzeWithCosmos(
   }
 }
 
+interface CountItem {
+  id: number;
+  label: string;
+  confidence: number;
+  box: [number, number, number, number];
+}
+
+interface MarkCountResult {
+  count: number;
+  items: CountItem[];
+  notes?: string;
+}
+
+async function classifyCountingIntent(userPrompt: string): Promise<boolean> {
+  if (!OPENAI_API_KEY) {
+    console.log("[CLASSIFY] No OpenAI API key, using pattern matching fallback");
+    return isCountingPromptFallback(userPrompt);
+  }
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are a classifier that determines if a user's question about an image requires counting or enumeration. 
+
+Respond with ONLY "count" or "qa" (no other text).
+
+Respond "count" for:
+- "How many..." questions
+- "Count the..." requests  
+- "Number of..." queries
+- Inventory-style questions ("How many boxes/cars/people?")
+- Comparison counts ("Are there more than N...")
+- Attribute-specific counts ("How many have white labels?", "How many wearing hard hats?")
+- List and count requests ("List each ... and count them")
+- Location-specific counts ("How many pallets on the left?", "How many vehicles in the lane?")
+
+Respond "qa" for:
+- Descriptions ("What's happening?", "Describe the scene")
+- Reasoning ("Is this unsafe?", "Why did the alert fire?")
+- Policy/intent questions ("Is someone unauthorized?")
+- Summaries ("Summarize the scene")
+- Yes/no questions not about quantity
+- Identification questions ("What type of vehicle is that?")`
+          },
+          {
+            role: "user",
+            content: userPrompt
+          }
+        ],
+        max_tokens: 10,
+        temperature: 0
+      })
+    });
+
+    if (!response.ok) {
+      console.error("[CLASSIFY] OpenAI API error:", response.status);
+      return isCountingPromptFallback(userPrompt);
+    }
+
+    const result = await response.json();
+    const classification = result.choices?.[0]?.message?.content?.trim().toLowerCase() || "qa";
+    console.log(`[CLASSIFY] "${userPrompt.substring(0, 50)}..." -> ${classification}`);
+    return classification === "count";
+  } catch (error) {
+    console.error("[CLASSIFY] Error:", error);
+    return isCountingPromptFallback(userPrompt);
+  }
+}
+
+function isCountingPromptFallback(prompt: string): boolean {
+  const lowerPrompt = prompt.toLowerCase();
+  const countingPatterns = [
+    /how many/i,
+    /count the/i,
+    /number of/i,
+    /\bhow\s+many\b/i,
+    /\bcount\b/i,
+    /are there more than \d+/i,
+    /list each .* and count/i,
+    /\btotal\b.*\b(items?|objects?|people|persons?|vehicles?|cars?|boxes?)\b/i,
+  ];
+  return countingPatterns.some(pattern => pattern.test(lowerPrompt));
+}
+
+async function analyzeWithCosmosMarkCount(
+  frameData: string, 
+  userPrompt: string, 
+  roi?: [number, number, number, number],
+  sceneContext?: string
+): Promise<MarkCountResult> {
+  const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
+  const base64Data = dataUrlMatch 
+    ? frameData.slice(dataUrlMatch[0].length)
+    : frameData;
+
+  const questionWithContext = sceneContext 
+    ? `[Context: ${sceneContext}] ${userPrompt}` 
+    : userPrompt;
+
+  const payload: {
+    mode: string;
+    prompt: string;
+    image_b64: string;
+    max_image_side: number;
+    max_new_tokens: number;
+    roi?: [number, number, number, number];
+  } = {
+    mode: "mark_count",
+    prompt: questionWithContext,
+    image_b64: base64Data,
+    max_image_side: 768,
+    max_new_tokens: 128,
+  };
+
+  if (roi) {
+    payload.roi = roi;
+  }
+
+  const targetUrl = `${COSMOS_ENDPOINT}/infer`;
+  console.log(`[MARK_COUNT] --> ${targetUrl}`);
+
+  const response = await fetch(targetUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Cosmos mark_count API error: ${response.status} - ${errorText}`);
+  }
+
+  const apiResult = await response.json();
+  console.log(`[MARK_COUNT] <-- API result:`, JSON.stringify(apiResult).substring(0, 300));
+
+  return {
+    count: apiResult.count ?? 0,
+    items: apiResult.items ?? [],
+    notes: apiResult.notes,
+  };
+}
+
 async function analyzeWithCosmosAdhocDirect(frameData: string, userPrompt: string, sceneContext?: string): Promise<string> {
   const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
   const base64Data = dataUrlMatch 
@@ -303,32 +454,60 @@ async function analyzeWithCosmosAdhocDirect(frameData: string, userPrompt: strin
   return content;
 }
 
-async function analyzeWithCosmosAdhoc(frameData: string, userPrompt: string, sceneContext?: string): Promise<{ result: string; model: string }> {
+interface AdhocAnalysisResult {
+  result: string;
+  model: string;
+  mode: "qa" | "mark_count";
+  countData?: MarkCountResult;
+}
+
+async function analyzeWithCosmosAdhoc(
+  frameData: string, 
+  userPrompt: string, 
+  sceneContext?: string,
+  roi?: [number, number, number, number]
+): Promise<AdhocAnalysisResult> {
   if (!frameData || frameData.length < 100) {
-    return { result: "Invalid frame captured - video may not be loaded", model: "none" };
+    return { result: "Invalid frame captured - video may not be loaded", model: "none", mode: "qa" };
   }
 
-  // NOTE: Intelligent routing code preserved but bypassed for fastest response times
-  // To re-enable routing, uncomment the block below:
-  /*
-  const questionType = classifyPrompt(userPrompt);
+  // Use OpenAI to classify if this is a counting query
+  const isCountingQuery = await classifyCountingIntent(userPrompt);
   
-  if (questionType === "precision" && OPENAI_API_KEY) {
+  if (isCountingQuery) {
+    console.log("[ROUTER] Routing to mark_count mode for counting query");
     try {
-      console.log("[ROUTER] Routing to GPT-4o for precision analysis");
-      const result = await analyzeWithGPT4o(frameData, userPrompt);
-      return { result, model: "gpt-4o" };
+      const countResult = await analyzeWithCosmosMarkCount(frameData, userPrompt, roi, sceneContext);
+      
+      // Format a readable result string
+      let resultText = `Count: ${countResult.count}`;
+      if (countResult.items && countResult.items.length > 0) {
+        resultText += `\n\nItems detected:`;
+        countResult.items.forEach((item, i) => {
+          resultText += `\n${i + 1}. ${item.label} (${Math.round(item.confidence * 100)}% confidence)`;
+        });
+      }
+      if (countResult.notes) {
+        resultText += `\n\nNotes: ${countResult.notes}`;
+      }
+      
+      return { 
+        result: resultText, 
+        model: "cosmos-reason2-count", 
+        mode: "mark_count",
+        countData: countResult 
+      };
     } catch (error) {
-      console.error("[ROUTER] GPT-4o failed, falling back to Cosmos:", error);
+      console.error("[ROUTER] mark_count failed, falling back to qa:", error);
       const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt, sceneContext);
-      return { result, model: "cosmos-reason2" };
+      return { result, model: "cosmos-reason2", mode: "qa" };
     }
   }
-  */
 
-  // Direct route to Cosmos for all queries
+  // Route to QA mode for non-counting queries
+  console.log("[ROUTER] Routing to qa mode for general query");
   const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt, sceneContext);
-  return { result, model: "cosmos-reason2" };
+  return { result, model: "cosmos-reason2", mode: "qa" };
 }
 
 async function getBatchSceneObservations(
@@ -927,14 +1106,35 @@ export async function registerRoutes(
 
   app.post("/api/analyze-adhoc", async (req, res) => {
     try {
-      const { frameData, prompt, sceneContext } = req.body;
+      const { frameData, prompt, sceneContext, roi } = req.body;
 
       if (!frameData || !prompt) {
         return res.status(400).json({ error: "frameData and prompt are required" });
       }
 
-      const { result, model } = await analyzeWithCosmosAdhoc(frameData, prompt.trim(), sceneContext);
-      res.json({ analysis: result, model });
+      // Validate ROI if provided (should be [x1, y1, x2, y2] normalized array)
+      let validatedRoi: [number, number, number, number] | undefined;
+      if (roi && Array.isArray(roi) && roi.length === 4) {
+        const [x1, y1, x2, y2] = roi;
+        if (typeof x1 === 'number' && typeof y1 === 'number' && 
+            typeof x2 === 'number' && typeof y2 === 'number') {
+          validatedRoi = [x1, y1, x2, y2];
+        }
+      }
+
+      const { result, model, mode, countData } = await analyzeWithCosmosAdhoc(
+        frameData, 
+        prompt.trim(), 
+        sceneContext,
+        validatedRoi
+      );
+      
+      res.json({ 
+        analysis: result, 
+        model, 
+        mode,
+        countData 
+      });
     } catch (error) {
       console.error("Error in ad-hoc analysis:", error);
       res.status(500).json({ error: "Failed to analyze frame" });

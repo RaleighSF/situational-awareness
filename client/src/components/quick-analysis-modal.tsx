@@ -8,25 +8,44 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Send, Loader2, Hash, Box } from "lucide-react";
+
+interface CountItem {
+  id: number;
+  label: string;
+  confidence: number;
+  box: [number, number, number, number];
+}
+
+interface CountData {
+  count: number;
+  items: CountItem[];
+  notes?: string;
+}
 
 interface QuickAnalysisModalProps {
   isOpen: boolean;
   onClose: () => void;
   frameData: string | null;
   sceneContext?: string;
+  roi?: [number, number, number, number];
 }
 
-export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }: QuickAnalysisModalProps) {
+export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext, roi }: QuickAnalysisModalProps) {
   const [prompt, setPrompt] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [response, setResponse] = useState<string | null>(null);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
+  const [mode, setMode] = useState<"qa" | "mark_count" | null>(null);
+  const [countData, setCountData] = useState<CountData | null>(null);
 
   const handleClose = () => {
     setPrompt("");
     setResponse(null);
     setModelUsed(null);
+    setMode(null);
+    setCountData(null);
     setIsAnalyzing(false);
     onClose();
   };
@@ -36,7 +55,9 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
       case "gpt-4o":
         return "GPT-4o (Precision)";
       case "cosmos-reason2":
-        return "Cosmos-Reason2 (Situational)";
+        return "Cosmos (Q&A)";
+      case "cosmos-reason2-count":
+        return "Cosmos (Count)";
       default:
         return model;
     }
@@ -48,11 +69,13 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
     setIsAnalyzing(true);
     setResponse(null);
     setModelUsed(null);
+    setMode(null);
+    setCountData(null);
 
     try {
       const res = await fetch("/api/analyze-adhoc", {
         method: "POST",
-        body: JSON.stringify({ frameData, prompt: prompt.trim(), sceneContext }),
+        body: JSON.stringify({ frameData, prompt: prompt.trim(), sceneContext, roi }),
         headers: { "Content-Type": "application/json" },
       });
       
@@ -63,6 +86,10 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
       const result = await res.json();
       setResponse(result.analysis || "No response received from the model. Please try again.");
       setModelUsed(result.model || null);
+      setMode(result.mode || "qa");
+      if (result.countData) {
+        setCountData(result.countData);
+      }
     } catch (error) {
       setResponse(`Error: ${error instanceof Error ? error.message : "Analysis failed"}`);
     } finally {
@@ -110,7 +137,7 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
               size="icon"
               onClick={handleAnalyze}
               disabled={!prompt.trim() || isAnalyzing}
-              className="h-10 w-10 shrink-0 bg-[#76b900] hover:bg-[#76b900]/90"
+              className="shrink-0 bg-[#76b900]"
               data-testid="button-analyze"
             >
               {isAnalyzing ? (
@@ -122,10 +149,10 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
           </div>
 
           {response && (
-            <ScrollArea className="flex-1 max-h-[200px]">
+            <ScrollArea className="flex-1 max-h-[250px]">
               <div className="p-4 rounded-lg bg-muted/50 border">
                 {modelUsed && (
-                  <div className="flex items-center gap-2 mb-2 pb-2 border-b">
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b">
                     <span className="text-xs text-muted-foreground">Analyzed by:</span>
                     <span 
                       className={`text-xs font-medium px-2 py-0.5 rounded ${
@@ -137,11 +164,54 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
                     >
                       {getModelDisplayName(modelUsed)}
                     </span>
+                    {mode === "mark_count" && (
+                      <Badge variant="outline" className="text-xs ml-auto">
+                        <Hash className="h-3 w-3 mr-1" />
+                        Count Mode
+                      </Badge>
+                    )}
                   </div>
                 )}
-                <p className="text-sm whitespace-pre-wrap" data-testid="text-analysis-response">
-                  {response}
-                </p>
+                
+                {mode === "mark_count" && countData ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-bold text-[#76b900]" data-testid="text-count-result">
+                        {countData.count}
+                      </span>
+                      <span className="text-sm text-muted-foreground">items detected</span>
+                    </div>
+                    
+                    {countData.items && countData.items.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Detected Items:</p>
+                        {countData.items.map((item, i) => (
+                          <div 
+                            key={item.id || i} 
+                            className="flex items-center gap-2 text-sm p-2 rounded bg-background/50"
+                            data-testid={`count-item-${i}`}
+                          >
+                            <Box className="h-3 w-3 text-[#76b900]" />
+                            <span className="font-medium">{item.label}</span>
+                            <span className="text-xs text-muted-foreground ml-auto">
+                              {item.confidence != null ? `${Math.round(item.confidence * 100)}%` : ''}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {countData.notes && (
+                      <p className="text-xs text-muted-foreground italic pt-2 border-t">
+                        {countData.notes}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap" data-testid="text-analysis-response">
+                    {response}
+                  </p>
+                )}
               </div>
             </ScrollArea>
           )}

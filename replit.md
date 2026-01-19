@@ -6,7 +6,14 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 
 ## Version History
 
-### v2.3 (Current)
+### v2.4 (Current)
+- **Mark Count mode**: OpenAI-powered classification routes counting queries to `/infer` with `mode="mark_count"`
+- Counting intent detection: "How many...", "Count the...", "Number of...", inventory-style questions
+- Structured count responses: Returns count, items with labels/confidence, and optional notes
+- ROI support: Passes bounding box as `[x1, y1, x2, y2]` normalized array for focused counting
+- Non-counting queries (descriptions, reasoning, summaries) route to `mode="qa"`
+
+### v2.3
 - **Schema alignment with Cosmos API v2.0**: Full alignment with server response format
 - Scene Agent synthesis: Now uses `timeline[].event` directly (no conversion)
 - Escalation: Changed from `escalations[]` to `escalation[]` (singular)
