@@ -1,78 +1,22 @@
 # Situational Awareness Demo
 
-**Version 1.0** - Milestone release (January 2026)
+**Version 1.3** - Major Release (January 2026)
 
 A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision language model for security monitoring and situational awareness.
 
 ## Version History
 
-### v2.4 (Current)
+### v1.3 (Current) - Major Release
 - **Mark Count mode**: OpenAI-powered classification routes counting queries to `/infer` with `mode="mark_count"`
 - Counting intent detection: "How many...", "Count the...", "Number of...", inventory-style questions
 - Structured count responses: Returns count, items with labels/confidence, and optional notes
 - ROI support: Passes bounding box as `[x1, y1, x2, y2]` normalized array for focused counting
 - Non-counting queries (descriptions, reasoning, summaries) route to `mode="qa"`
-
-### v2.3
-- **Schema alignment with Cosmos API v2.0**: Full alignment with server response format
-- Scene Agent synthesis: Now uses `timeline[].event` directly (no conversion)
-- Escalation: Changed from `escalations[]` to `escalation[]` (singular)
-- New `persistent[]` field: Displays stable/unchanged elements in scene
-- Changes section: Shows what evolved, appeared, or disappeared
-- Enhanced analysis cleanup: Strips more echoed prompt text patterns
-
-### v2.2
-- **Cosmos API v2 integration**: Client now sends `mode: "detect"` or `mode: "qa"` to server
-- Detection rules: Server handles prompt templating, client sends raw condition
-- Ad-hoc analysis: Uses `mode: "qa"` for expert visual analyst responses
-- Scene Agent `/reason`: Expects JSON response with timeline, changes, anomalies, escalation fields
-- Parsing improvements: Converts server's `timeline[].event` → `events[].description`, filters "None" values
-- Schema update: Added `changes` array to synthesis output
-
-### v2.1
-- **Cosmos API update**: Prompts simplified to pure user instructions (no JSON enforcement)
-- Response parsing: Strip chat wrapper tokens (user/assistant markers) from API responses
-- Scene Agent: Parse new section headers format (Summary, Notable Changes, Timeline, Anomalies, Confidence)
-- Batch observations: Concise scene descriptions for better inference quality
-- Ad-hoc analysis: Streamlined prompts for faster responses
-
-### v2.0
-- Production reset: Each deployment resets prod database to match dev demo state
-- No stale data: All old/duplicate entries cleared on prod startup
-- Dev sync: Development seed removes sources not in demo list
-- Auto-persist uploads: Videos automatically copy to /attached_assets/ on upload
-- Clean filenames: Uploads get sanitized names (e.g., "Parking Lot" → "parking-lot.mp4")
-- File size limit: Individual videos must be under 50MB for deployment
-- Canonical demo data: Video sources, settings, and prompts are defined in server/storage.ts
-- Parking lot video converted from MOV to MP4 for better browser compatibility
-- Cosmos API health check: Header shows real-time API status and model load state
-
-### v1.8
-- Upload/delete buttons hidden in production mode
-- Videos should be uploaded in Development, then published
-- All video data (sources, prompts, alerts, settings) persists in database across deployments
-
-### v1.7
-- Production fix: Reverted to local file storage for video uploads
-- Videos now upload via multipart/form-data to /api/video-sources/upload (multer-based)
-- Removed broken Object Storage entries from database
-- Note: Object Storage sidecar (127.0.0.1:1106) is unavailable in production deployments
-
-### v1.6
-- Attempted GCS URL fix (deprecated in favor of v1.7 local storage approach)
-
-### v1.5
-- Attempted Cloud Object Storage integration (deprecated - doesn't work in production)
-
-### v1.4
-- Quick Frame Analysis: Camera icon opens modal to ask ad-hoc questions about captured frames
-- Uses /api/analyze-adhoc endpoint for free-form prompts without saving rules
-- Enhanced Scene Agent reliability with 2048 token limit and fallback parsing for truncated responses
-
-### v1.3
-- Source-specific alerts: Alerts panel now filters by current video source instead of showing all alerts
-- Upload name dialog: Users can enter friendly names for uploaded videos instead of displaying raw filenames
-- Improved upload UX with cancel functionality and loading states
+- **Cosmos API v2 integration**: Full alignment with server response format
+- Scene Agent improvements: Timeline events, persistent elements, changes tracking, escalation handling
+- Production stability: Database reset on deployment, canonical demo data, improved video handling
+- Quick Frame Analysis: Camera icon opens modal for ad-hoc questions about captured frames
+- Source-specific profiles: Each video source maintains independent detection rules and settings
 
 ### v1.2
 - Video upload capability: Users can upload MP4, WebM, OGG, or QuickTime videos (max 100MB)
