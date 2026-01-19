@@ -758,10 +758,20 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
       if (finalTimeline.length < 4 && observations.length > 0) {
         console.log(`[REASON] Timeline insufficient (${timeline.length}), generating from observations`);
         finalTimeline = observations.map((obs, idx) => {
-          const firstSentence = obs.text.split(/[.!?]/)[0]?.trim() || "Scene observed";
-          const briefEvent = firstSentence.length > 60 
-            ? firstSentence.substring(0, 57) + "..." 
-            : firstSentence;
+          const sentences = obs.text.split(/[.!?]/).map(s => s.trim()).filter(s => s.length > 10);
+          // Skip generic scene inventory sentences, find action-oriented ones
+          const actionSentence = sentences.find(s => 
+            !s.match(/^(In the (image|scene)|There is \w+ person|The (image|scene) shows)/i) &&
+            (s.match(/(is |are |appears? |reading|holding|wearing|sitting|standing|moving|walking|looking|focused|engaged)/i))
+          );
+          // Fall back to a sentence about activities if no action found
+          const activitySentence = sentences.find(s => 
+            s.match(/(reading|holding|wearing|focused|engaged|positioned|seated|stationary)/i)
+          );
+          const bestSentence = actionSentence || activitySentence || sentences[0] || "Scene observed";
+          const briefEvent = bestSentence.length > 70 
+            ? bestSentence.substring(0, 67) + "..." 
+            : bestSentence;
           return { t: idx * 4, event: briefEvent };
         });
       }
