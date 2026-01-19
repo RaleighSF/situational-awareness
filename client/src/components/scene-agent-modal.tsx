@@ -177,41 +177,44 @@ export function SceneAgentModal({
                   <div className="flex items-center gap-2 mb-4" data-testid="section-timeline">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <h3 className="font-medium">Timeline</h3>
+                    <span className="text-xs text-muted-foreground">({synthesis.timeline.length} events)</span>
                   </div>
-                  <div className="relative">
-                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
-                    <div className="space-y-4">
-                      {synthesis.timeline.map((timelineEvent, index) => {
-                        const matchingObs = result.observations.find(o => o.t === timelineEvent.t);
-                        return (
-                          <div key={index} className="relative pl-6" data-testid={`timeline-entry-${index}`}>
-                            <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full bg-background border-2 border-muted-foreground" />
-                            <div>
-                              <span className="text-xs font-medium text-foreground">
-                                T+{timelineEvent.t}s
-                              </span>
-                              <p className="text-sm text-muted-foreground mt-1">
-                                {timelineEvent.event}
-                              </p>
-                              {matchingObs && (
-                                <Collapsible>
-                                  <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground/70 hover:text-muted-foreground mt-2 hover-elevate">
-                                    <ChevronDown className="h-3 w-3" />
-                                    <span>Frame details</span>
-                                  </CollapsibleTrigger>
-                                  <CollapsibleContent>
-                                    <p className="text-xs text-muted-foreground/70 mt-2 pl-4 border-l border-border whitespace-pre-line">
-                                      {matchingObs.text}
-                                    </p>
-                                  </CollapsibleContent>
-                                </Collapsible>
-                              )}
+                  <ScrollArea className="max-h-[250px] pr-4">
+                    <div className="relative">
+                      <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+                      <div className="space-y-4">
+                        {synthesis.timeline.map((timelineEvent, index) => {
+                          const matchingObs = result.observations.find(o => o.t === timelineEvent.t);
+                          return (
+                            <div key={index} className="relative pl-6" data-testid={`timeline-entry-${index}`}>
+                              <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full bg-background border-2 border-muted-foreground" />
+                              <div>
+                                <span className="text-xs font-medium text-foreground">
+                                  T+{timelineEvent.t}s
+                                </span>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {timelineEvent.event}
+                                </p>
+                                {matchingObs && (
+                                  <Collapsible>
+                                    <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground/70 hover:text-muted-foreground mt-2 hover-elevate">
+                                      <ChevronDown className="h-3 w-3" />
+                                      <span>Frame details</span>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                      <p className="text-xs text-muted-foreground/70 mt-2 pl-4 border-l border-border whitespace-pre-line">
+                                        {matchingObs.text}
+                                      </p>
+                                    </CollapsibleContent>
+                                  </Collapsible>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  </ScrollArea>
                 </div>
               </>
             )}
