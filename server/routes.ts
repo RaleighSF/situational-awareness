@@ -185,23 +185,23 @@ async function analyzeWithCosmos(
 
   const roi = boundingBoxToROI(boundingBox);
 
-  // Build condition with optional scene context
-  const conditionWithContext = sceneContext 
-    ? `[Context: ${sceneContext}] ${prompt}` 
-    : prompt;
-
   const payload: {
     image_b64: string;
     prompt: string;
     mode: string;
     max_new_tokens: number;
     roi?: CosmosROI;
+    scene_context?: string;
   } = {
     image_b64: base64Data,
-    prompt: conditionWithContext,
+    prompt: prompt,
     mode: "detect",
     max_new_tokens: 256,
   };
+
+  if (sceneContext) {
+    payload.scene_context = sceneContext;
+  }
 
   if (roi) {
     payload.roi = roi;
@@ -361,10 +361,6 @@ async function analyzeWithCosmosMarkCount(
     ? frameData.slice(dataUrlMatch[0].length)
     : frameData;
 
-  const questionWithContext = sceneContext 
-    ? `[Context: ${sceneContext}] ${userPrompt}` 
-    : userPrompt;
-
   const payload: {
     mode: string;
     prompt: string;
@@ -372,13 +368,18 @@ async function analyzeWithCosmosMarkCount(
     max_image_side: number;
     max_new_tokens: number;
     roi?: [number, number, number, number];
+    scene_context?: string;
   } = {
     mode: "mark_count",
-    prompt: questionWithContext,
+    prompt: userPrompt,
     image_b64: base64Data,
     max_image_side: 768,
     max_new_tokens: 128,
   };
+
+  if (sceneContext) {
+    payload.scene_context = sceneContext;
+  }
 
   if (roi) {
     payload.roi = roi;
@@ -456,17 +457,22 @@ async function analyzeWithCosmosAdhocDirect(frameData: string, userPrompt: strin
     ? frameData.slice(dataUrlMatch[0].length)
     : frameData;
 
-  // Build question with optional scene context
-  const questionWithContext = sceneContext 
-    ? `[Context: ${sceneContext}] ${userPrompt}` 
-    : userPrompt;
-
-  const payload = {
+  const payload: {
+    image_b64: string;
+    prompt: string;
+    mode: string;
+    max_new_tokens: number;
+    scene_context?: string;
+  } = {
     image_b64: base64Data,
-    prompt: questionWithContext,
+    prompt: userPrompt,
     mode: "qa",
     max_new_tokens: 512,
   };
+
+  if (sceneContext) {
+    payload.scene_context = sceneContext;
+  }
 
   const targetUrl = `${COSMOS_ENDPOINT}/infer`;
   console.log(`[COSMOS] --> ${targetUrl}`);
@@ -548,11 +554,7 @@ async function getBatchSceneObservations(
   intervalSeconds: number, 
   sceneContext?: string
 ): Promise<FrameObservation[]> {
-  const contextPreamble = sceneContext 
-    ? `Scene Context: ${sceneContext}\n\n` 
-    : "";
-
-  const prompt = `${contextPreamble}Security camera observation. Describe scene state: people (count, positions, actions, movement direction), objects (type, location, state), vehicles/equipment (type, motion), and notable signals or changes. Be concise and factual.`;
+  const prompt = `Security camera observation. Describe scene state: people (count, positions, actions, movement direction), objects (type, location, state), vehicles/equipment (type, motion), and notable signals or changes. Be concise and factual.`;
 
   const items = frames.map((frameData, index) => {
     const t = Math.round(index * intervalSeconds);
@@ -563,12 +565,22 @@ async function getBatchSceneObservations(
     return { t, image_b64 };
   });
 
-  const payload = {
+  const payload: {
+    prompt: string;
+    max_new_tokens: number;
+    max_image_side: number;
+    items: { t: number; image_b64: string }[];
+    scene_context?: string;
+  } = {
     prompt,
     max_new_tokens: 256,
     max_image_side: 512,
     items,
   };
+
+  if (sceneContext) {
+    payload.scene_context = sceneContext;
+  }
 
   const requestBody = JSON.stringify(payload);
   const requestSizeKB = (requestBody.length / 1024).toFixed(1);
@@ -631,9 +643,8 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
   const totalSeconds = Math.round(maxT > 0 ? maxT : observations.length * 5);
 
   // Build synthesis prompt that grounds timeline in actual observations
-  const contextStr = sceneContext ? `Scene context: ${sceneContext}\n\n` : "";
   const frameCount = observations.length;
-  const synthesisPrompt = `${contextStr}Create a timeline with ${frameCount} entries, one BRIEF event per observation timestamp (t=0, t=4, t=8, etc). Each timeline event should be 10-15 words max describing the key action or change at that moment. Focus on: what changed from the previous frame, notable actions, emerging situations. Do NOT invent events - only describe what is explicitly observed. Keep descriptions concise.`;
+  const synthesisPrompt = `Create a timeline with ${frameCount} entries, one BRIEF event per observation timestamp (t=0, t=4, t=8, etc). Each timeline event should be 10-15 words max describing the key action or change at that moment. Focus on: what changed from the previous frame, notable actions, emerging situations. Do NOT invent events - only describe what is explicitly observed. Keep descriptions concise.`;
 
   // Truncate each observation to 3 sentences max to save tokens
   const truncatedObservations = observationsPayload.map(o => {
@@ -641,12 +652,22 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     return { t: Math.round(o.t), text: sentences.join(' ') };
   });
 
-  const payload = {
+  const payload: {
+    observations: { t: number; text: string }[];
+    total_seconds: number;
+    max_new_tokens: number;
+    prompt: string;
+    scene_context?: string;
+  } = {
     observations: truncatedObservations,
     total_seconds: totalSeconds,
     max_new_tokens: 2048,
     prompt: synthesisPrompt,
   };
+
+  if (sceneContext) {
+    payload.scene_context = sceneContext;
+  }
 
   const requestBody = JSON.stringify(payload);
   const requestSizeKB = (requestBody.length / 1024).toFixed(1);
