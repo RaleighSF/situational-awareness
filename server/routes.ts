@@ -64,12 +64,10 @@ function classifyPrompt(userPrompt: string): QuestionType {
   
   for (const keyword of precisionKeywords) {
     if (lowerPrompt.includes(keyword)) {
-      console.log(`[ROUTER] Classified as PRECISION (matched: "${keyword}")`);
       return "precision";
     }
   }
   
-  console.log("[ROUTER] Classified as SITUATIONAL (no precision keywords found)");
   return "situational";
 }
 
@@ -278,7 +276,6 @@ interface MarkCountResult {
 
 async function classifyCountingIntent(userPrompt: string): Promise<boolean> {
   if (!OPENAI_API_KEY) {
-    console.log("[CLASSIFY] No OpenAI API key, using pattern matching fallback");
     return isCountingPromptFallback(userPrompt);
   }
 
@@ -327,16 +324,13 @@ Respond "qa" for:
     });
 
     if (!response.ok) {
-      console.error("[CLASSIFY] OpenAI API error:", response.status);
       return isCountingPromptFallback(userPrompt);
     }
 
     const result = await response.json();
     const classification = result.choices?.[0]?.message?.content?.trim().toLowerCase() || "qa";
-    console.log(`[CLASSIFY] "${userPrompt.substring(0, 50)}..." -> ${classification}`);
     return classification === "count";
   } catch (error) {
-    console.error("[CLASSIFY] Error:", error);
     return isCountingPromptFallback(userPrompt);
   }
 }
@@ -391,8 +385,6 @@ async function analyzeWithCosmosMarkCount(
   }
 
   const targetUrl = `${COSMOS_ENDPOINT}/infer`;
-  console.log(`[MARK_COUNT] --> ${targetUrl}`);
-  console.log(`[MARK_COUNT] Image size: ${base64Data.length} chars, prompt: "${questionWithContext.substring(0, 50)}..."`);
 
   const response = await fetch(targetUrl, {
     method: "POST",
@@ -406,7 +398,6 @@ async function analyzeWithCosmosMarkCount(
   }
 
   const apiResult = await response.json();
-  console.log(`[MARK_COUNT] <-- API result:`, JSON.stringify(apiResult).substring(0, 500));
 
   // Cosmos mark_count may return data in different formats:
   // 1. Direct: { count: N, items: [...] }
@@ -456,7 +447,6 @@ async function analyzeWithCosmosMarkCount(
     notes = textContent;
   }
 
-  console.log(`[MARK_COUNT] Parsed: count=${count}, items=${items.length}`);
   return { count, items, notes };
 }
 
@@ -521,7 +511,6 @@ async function analyzeWithCosmosAdhoc(
   const isCountingQuery = await classifyCountingIntent(userPrompt);
   
   if (isCountingQuery) {
-    console.log("[ROUTER] Routing to mark_count mode for counting query");
     try {
       const countResult = await analyzeWithCosmosMarkCount(frameData, userPrompt, roi, sceneContext);
       
@@ -544,14 +533,12 @@ async function analyzeWithCosmosAdhoc(
         countData: countResult 
       };
     } catch (error) {
-      console.error("[ROUTER] mark_count failed, falling back to qa:", error);
       const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt, sceneContext);
       return { result, model: "cosmos-reason2", mode: "qa" };
     }
   }
 
   // Route to QA mode for non-counting queries
-  console.log("[ROUTER] Routing to qa mode for general query");
   const result = await analyzeWithCosmosAdhocDirect(frameData, userPrompt, sceneContext);
   return { result, model: "cosmos-reason2", mode: "qa" };
 }
