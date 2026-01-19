@@ -733,10 +733,23 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
 
       console.log(`[REASON] Using root-level synthesis: ${summaryText.substring(0, 80)}...`);
       
+      // If timeline is empty/insufficient, generate from observations
+      let finalTimeline = timeline.length >= 4 ? timeline.slice(0, 8) : [];
+      if (finalTimeline.length < 4 && observations.length > 0) {
+        console.log(`[REASON] Timeline insufficient (${timeline.length}), generating from observations`);
+        finalTimeline = observations.map((obs, idx) => {
+          const firstSentence = obs.text.split(/[.!?]/)[0]?.trim() || "Scene observed";
+          const briefEvent = firstSentence.length > 60 
+            ? firstSentence.substring(0, 57) + "..." 
+            : firstSentence;
+          return { t: idx * 4, event: briefEvent };
+        });
+      }
+      
       return {
         synthesis: {
           summary: summaryText.substring(0, 400),
-          timeline: timeline.length > 0 ? timeline.slice(0, 8) : [{ t: 0, event: "Scene observed" }],
+          timeline: finalTimeline.length > 0 ? finalTimeline : [{ t: 0, event: "Scene observed" }],
           changes,
           persistent,
           anomalies,
