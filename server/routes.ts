@@ -457,14 +457,73 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     console.log(`[REASON] API response keys:`, Object.keys(apiResult));
     console.log(`[REASON] Full API response:`, JSON.stringify(apiResult).substring(0, 500));
     
-    const rawTextUncleaned = apiResult.raw_text || apiResult.text || "";
+    // The API returns synthesis fields at the root level (summary, changes, persistent, timeline, etc.)
+    // Also has 'raw' field with the raw model output, and '_latency_ms' for timing
+    const rawTextUncleaned = apiResult.raw || apiResult.raw_text || apiResult.text || "";
     const rawText = stripChatMarkers(rawTextUncleaned);
     const responseChars = rawText.length;
     const responseWords = rawText.split(/\s+/).length;
     
     console.log(`[REASON] body parsed: +${parseMs}ms | TOTAL: ${totalMs}ms | ${responseWords} words, ${responseChars} chars`);
     
-    // Try to parse the structured result first (from apiResult.result)
+    // The API returns synthesis data at root level - use it directly
+    if (apiResult.summary && typeof apiResult.summary === 'string') {
+      // Parse timeline events (server format: {t, event})
+      const timeline: { t: number; event: string }[] = [];
+      if (Array.isArray(apiResult.timeline)) {
+        for (const item of apiResult.timeline) {
+          const t = typeof item.t === 'number' ? item.t : 0;
+          const eventText = item.event || '';
+          const event = eventText.replace(/^\d+s?:\s*/, '').trim();
+          if (event && event !== "None") {
+            timeline.push({ t, event: event.substring(0, 150) });
+          }
+        }
+      }
+
+      // Handle escalation (singular array from server)
+      const escalation = Array.isArray(apiResult.escalation) 
+        ? apiResult.escalation.filter((e: string) => e && e !== "None")
+        : [];
+
+      const anomalies = Array.isArray(apiResult.anomalies)
+        ? apiResult.anomalies.filter((a: string) => a && a !== "None observed" && a !== "None")
+        : [];
+
+      const changes = Array.isArray(apiResult.changes)
+        ? apiResult.changes.filter((c: string) => c && c !== "None")
+        : [];
+
+      const persistent = Array.isArray(apiResult.persistent)
+        ? apiResult.persistent.filter((p: string) => p && p !== "None")
+        : [];
+
+      const confidence = typeof apiResult.confidence === 'number' 
+        ? Math.min(1, Math.max(0, apiResult.confidence))
+        : 0.5;
+
+      // Check if the summary indicates a parsing error from the API
+      const summaryText = apiResult.summary === "Synthesis returned non-JSON output." 
+        ? "Scene analysis complete."
+        : apiResult.summary;
+
+      console.log(`[REASON] Using root-level synthesis: ${summaryText.substring(0, 80)}...`);
+      
+      return {
+        synthesis: {
+          summary: summaryText.substring(0, 400),
+          timeline: timeline.length > 0 ? timeline.slice(0, 8) : [{ t: 0, event: "Scene observed" }],
+          changes,
+          persistent,
+          anomalies,
+          escalation,
+          confidence,
+        },
+        rawText,
+      };
+    }
+    
+    // Fallback: Try to parse the structured result from apiResult.result
     if (apiResult.result) {
       const parseResult = sceneAgentSynthesisSchema.safeParse(apiResult.result);
       if (parseResult.success) {
