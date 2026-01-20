@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { storage } from "./storage";
+import { storage, exportDemoSnapshot } from "./storage";
 import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema, sceneAgentSynthesisSchema, sourceSettingsSchema } from "@shared/schema";
 import type { BoundingBox, FrameObservation, SceneAgentSynthesis, SceneAgentResult } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
@@ -953,6 +953,21 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   await seedVideoSources();
+
+  // Export demo snapshot for production deployment
+  app.post("/api/demo/export-snapshot", async (_req, res) => {
+    try {
+      const stats = await exportDemoSnapshot();
+      res.json({ 
+        success: true, 
+        message: "Demo snapshot exported successfully",
+        ...stats 
+      });
+    } catch (error) {
+      console.error("Error exporting demo snapshot:", error);
+      res.status(500).json({ error: "Failed to export demo snapshot" });
+    }
+  });
 
   app.get("/api/video-sources", async (_req, res) => {
     try {

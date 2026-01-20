@@ -13,7 +13,7 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 - Non-counting queries (descriptions, reasoning, summaries) route to `mode="qa"`
 - **Cosmos API v2 integration**: Full alignment with server response format
 - Scene Agent improvements: Timeline events, persistent elements, changes tracking, escalation handling
-- Production stability: Data persists across deployments, new demo sources synced automatically
+- Production stability: Demo snapshot system - export dev data and deploy to production for identical demo experiences
 - Quick Frame Analysis: Camera icon opens modal for ad-hoc questions about captured frames
 - Source-specific profiles: Each video source maintains independent detection rules and settings
 - **ROI fix**: Fixed double-cropping bug where client-cropped frames were also getting ROI applied by Cosmos

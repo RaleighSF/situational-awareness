@@ -12,6 +12,8 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, inArray } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
 
 // Canonical demo dataset - this defines all demo data that will be restored on each production deployment
 const DEMO_VIDEO_SOURCES = [
@@ -148,6 +150,101 @@ export async function seedDemoVideoSources(): Promise<void> {
     }
   }
   console.log("[Seed] Demo video sources sync complete");
+}
+
+// Demo snapshot file path - committed to repo for production deployment
+const DEMO_SNAPSHOT_PATH = path.join(process.cwd(), "demo-snapshot.json");
+
+// Export current database state to a snapshot file for production deployment
+export async function exportDemoSnapshot(): Promise<{ videoSources: number; prompts: number; alerts: number }> {
+  console.log("[Snapshot] Exporting demo data...");
+  
+  const allVideoSources = await db.select().from(videoSources);
+  const allPrompts = await db.select().from(prompts);
+  const allAlerts = await db.select().from(alerts);
+  
+  const snapshot = {
+    exportedAt: new Date().toISOString(),
+    videoSources: allVideoSources,
+    prompts: allPrompts,
+    alerts: allAlerts,
+  };
+  
+  fs.writeFileSync(DEMO_SNAPSHOT_PATH, JSON.stringify(snapshot, null, 2));
+  console.log(`[Snapshot] Exported: ${allVideoSources.length} sources, ${allPrompts.length} prompts, ${allAlerts.length} alerts`);
+  
+  return {
+    videoSources: allVideoSources.length,
+    prompts: allPrompts.length,
+    alerts: allAlerts.length,
+  };
+}
+
+// Import demo snapshot into database (used in production)
+export async function importDemoSnapshot(): Promise<boolean> {
+  if (!fs.existsSync(DEMO_SNAPSHOT_PATH)) {
+    console.log("[Snapshot] No snapshot file found, skipping import");
+    return false;
+  }
+  
+  console.log("[Snapshot] Importing demo snapshot...");
+  const snapshotData = JSON.parse(fs.readFileSync(DEMO_SNAPSHOT_PATH, "utf-8"));
+  
+  // Clear existing data
+  await db.delete(alerts);
+  await db.delete(prompts);
+  await db.delete(videoSources);
+  console.log("[Snapshot] Cleared existing data");
+  
+  // Import video sources with their original IDs
+  const sourceIdMap = new Map<string, string>();
+  for (const source of snapshotData.videoSources) {
+    const [inserted] = await db.insert(videoSources).values({
+      name: source.name,
+      url: source.url,
+      isActive: source.isActive,
+      settings: source.settings,
+    }).returning();
+    sourceIdMap.set(source.id, inserted.id);
+    console.log(`[Snapshot] Imported source: ${source.name}`);
+  }
+  
+  // Import prompts with updated source IDs
+  const promptIdMap = new Map<string, string>();
+  for (const prompt of snapshotData.prompts) {
+    const newSourceId = sourceIdMap.get(prompt.videoSourceId);
+    if (newSourceId) {
+      const [inserted] = await db.insert(prompts).values({
+        videoSourceId: newSourceId,
+        name: prompt.name,
+        prompt: prompt.prompt,
+        boundingBox: prompt.boundingBox,
+        frequencySeconds: prompt.frequencySeconds,
+        isActive: prompt.isActive,
+      }).returning();
+      promptIdMap.set(prompt.id, inserted.id);
+      console.log(`[Snapshot] Imported prompt: ${prompt.name}`);
+    }
+  }
+  
+  // Import alerts with updated prompt IDs
+  for (const alert of snapshotData.alerts) {
+    const newPromptId = promptIdMap.get(alert.promptId);
+    if (newPromptId) {
+      await db.insert(alerts).values({
+        promptId: newPromptId,
+        timestamp: new Date(alert.timestamp),
+        frameData: alert.frameData,
+        analysisResult: alert.analysisResult,
+        confidence: alert.confidence,
+        isRead: alert.isRead,
+      });
+      console.log(`[Snapshot] Imported alert for prompt`);
+    }
+  }
+  
+  console.log(`[Snapshot] Import complete: ${snapshotData.videoSources.length} sources, ${snapshotData.prompts.length} prompts, ${snapshotData.alerts.length} alerts`);
+  return true;
 }
 
 export interface IStorage {
