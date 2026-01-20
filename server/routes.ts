@@ -996,8 +996,26 @@ async function synthesizeForAlert(
     else if (apiConfidence >= 0.5) confidence = "MEDIUM";
     else confidence = "LOW";
 
-    const analysisText = summaryText || "Temporal analysis completed.";
     const escalationText = escalationArr.filter((e: string) => e && e !== "None").join("; ");
+    const anomaliesText = anomaliesArr.filter((a: string) => a && a !== "None" && a !== "None observed").join("; ");
+    
+    // Build analysis text that reflects WHY the alert fired (or didn't)
+    let analysisText: string;
+    if (detected) {
+      // Alert triggered - explain what was detected
+      if (escalationText) {
+        analysisText = `Alert triggered: ${escalationText}`;
+      } else if (anomaliesText) {
+        analysisText = `Anomaly detected: ${anomaliesText}`;
+      } else if (apiConfidence >= 0.7) {
+        analysisText = summaryText || "High confidence detection based on temporal analysis.";
+      } else {
+        analysisText = summaryText || "Detection triggered based on temporal pattern analysis.";
+      }
+    } else {
+      // No alert - use summary or default
+      analysisText = summaryText || "No concerning patterns detected. Risk level is low.";
+    }
 
     return {
       detected,
