@@ -554,8 +554,7 @@ async function getBatchSceneObservations(
   intervalSeconds: number, 
   sceneContext?: string
 ): Promise<FrameObservation[]> {
-  const prompt = `Security camera observation. Describe scene state: people (count, positions, actions, movement direction), objects (type, location, state), vehicles/equipment (type, motion), and notable signals or changes. Be concise and factual.`;
-
+  // Let server's snapshot prompt run - scene_context is prepended as SCENE CONTEXT (PRIORITY)
   const items = frames.map((frameData, index) => {
     const t = Math.round(index * intervalSeconds);
     const dataUrlMatch = frameData.match(/^data:image\/([a-zA-Z]+);base64,/);
@@ -566,14 +565,12 @@ async function getBatchSceneObservations(
   });
 
   const payload: {
-    prompt: string;
     max_new_tokens: number;
     max_image_side: number;
     items: { t: number; image_b64: string }[];
     scene_context?: string;
   } = {
-    prompt,
-    max_new_tokens: 256,
+    max_new_tokens: 128,
     max_image_side: 512,
     items,
   };
@@ -658,7 +655,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     total_seconds: number;
     max_new_tokens: number;
     prompt: string;
-    scene_context?: string;
+    context?: string;
   } = {
     observations: truncatedObservations,
     total_seconds: totalSeconds,
@@ -666,9 +663,10 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     prompt: synthesisPrompt,
   };
 
+  // Use 'context' field for /reason endpoint (server does not read scene_context on /reason)
   if (sceneContext) {
-    payload.scene_context = sceneContext;
-    console.log(`[REASON] Including scene_context: "${sceneContext.substring(0, 80)}..."`);
+    payload.context = sceneContext;
+    console.log(`[REASON] Including context: "${sceneContext.substring(0, 80)}..."`);
   }
 
   const requestBody = JSON.stringify(payload);
@@ -676,7 +674,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
   const totalObsChars = observationsPayload.reduce((sum, o) => sum + o.text.length, 0);
   const targetUrl = `${COSMOS_ENDPOINT}/reason`;
   
-  console.log(`[REASON] --> ${targetUrl} (${requestSizeKB}KB, ${observationsPayload.length} obs, ${totalObsChars} chars, scene_context=${!!sceneContext})`);
+  console.log(`[REASON] --> ${targetUrl} (${requestSizeKB}KB, ${observationsPayload.length} obs, ${totalObsChars} chars, context=${!!sceneContext})`);
   const t0 = Date.now();
 
   try {
