@@ -580,13 +580,14 @@ async function getBatchSceneObservations(
 
   if (sceneContext) {
     payload.scene_context = sceneContext;
+    console.log(`[INFER_BATCH] Including scene_context: "${sceneContext.substring(0, 80)}..."`);
   }
 
   const requestBody = JSON.stringify(payload);
   const requestSizeKB = (requestBody.length / 1024).toFixed(1);
   const targetUrl = `${COSMOS_ENDPOINT}/infer_batch`;
   
-  console.log(`[INFER_BATCH] --> ${targetUrl} (${requestSizeKB}KB, ${items.length} frames)`);
+  console.log(`[INFER_BATCH] --> ${targetUrl} (${requestSizeKB}KB, ${items.length} frames, scene_context=${!!sceneContext})`);
   const t0 = Date.now();
 
   try {
@@ -667,6 +668,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
 
   if (sceneContext) {
     payload.scene_context = sceneContext;
+    console.log(`[REASON] Including scene_context: "${sceneContext.substring(0, 80)}..."`);
   }
 
   const requestBody = JSON.stringify(payload);
@@ -674,7 +676,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
   const totalObsChars = observationsPayload.reduce((sum, o) => sum + o.text.length, 0);
   const targetUrl = `${COSMOS_ENDPOINT}/reason`;
   
-  console.log(`[REASON] --> ${targetUrl} (${requestSizeKB}KB, ${observationsPayload.length} obs, ${totalObsChars} chars)`);
+  console.log(`[REASON] --> ${targetUrl} (${requestSizeKB}KB, ${observationsPayload.length} obs, ${totalObsChars} chars, scene_context=${!!sceneContext})`);
   const t0 = Date.now();
 
   try {
@@ -1388,6 +1390,7 @@ export async function registerRoutes(
       const { frames, intervalSeconds, durationSeconds, sceneContext } = parseResult.data;
 
       console.log(`[Scene Agent] Starting batch analysis of ${frames.length} frames over ${durationSeconds}s`);
+      console.log(`[Scene Agent] sceneContext provided: ${sceneContext ? `"${sceneContext.substring(0, 100)}..."` : "(none)"}`);
       const startTime = new Date().toISOString();
 
       const observations = await getBatchSceneObservations(frames, intervalSeconds, sceneContext);
