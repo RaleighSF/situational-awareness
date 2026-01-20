@@ -40,6 +40,11 @@ const DEMO_VIDEO_SOURCES = [
     url: "/attached_assets/newspaper.mp4",
     settings: null
   },
+  { 
+    name: "Ring Camera", 
+    url: "/attached_assets/ring-camera.mp4",
+    settings: null
+  },
 ];
 
 // Demo prompts linked by video source name
