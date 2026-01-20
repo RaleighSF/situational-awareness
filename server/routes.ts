@@ -944,18 +944,22 @@ async function synthesizeForAlert(
   const maxT = Math.max(...observations.map(o => Math.round(o.t)));
   const totalSeconds = Math.round(maxT > 0 ? maxT : observations.length * 2);
 
+  // Combine the rule prompt with scene context for the reasoning API
+  // The rule prompt contains the detection rule that needs to be evaluated
+  let combinedContext = rulePrompt;
+  if (sceneContext) {
+    combinedContext = `${rulePrompt}\n\nAdditional Scene Context: ${sceneContext}`;
+  }
+
   const payload: {
     observations: { t: number; text: string }[];
     total_seconds: number;
-    context?: string;
+    context: string;
   } = {
     observations: observationsPayload,
     total_seconds: totalSeconds,
+    context: combinedContext,
   };
-
-  if (sceneContext) {
-    payload.context = sceneContext;
-  }
 
   const targetUrl = `${COSMOS_ENDPOINT}/reason`;
   console.log(`[ALERT-SYNTHESIS] --> ${targetUrl} (${observations.length} observations)`);
