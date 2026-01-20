@@ -376,6 +376,8 @@ export default function Dashboard() {
     },
   });
 
+  const scheduleNextBatchRef = useRef<((promptId: string) => void) | null>(null);
+
   const analyzeBatchMutation = useMutation({
     mutationFn: async (data: { 
       frames: string[]; 
@@ -389,22 +391,28 @@ export default function Dashboard() {
         const errorData = await res.json();
         throw new Error(errorData.error || "Batch analysis failed");
       }
-      return res.json();
+      const result = await res.json();
+      return { ...result, _promptId: data.promptId };
     },
     onSuccess: (data) => {
+      batchInFlightRef.current.delete(data._promptId);
       setBatchCaptureProgress(null);
+      console.log(`[BatchAnalysis] API complete for prompt ${data._promptId}, scheduling next batch after cooldown`);
       if (data.alertCreated) {
         queryClient.invalidateQueries({ queryKey: ["/api/alerts", currentVideoSourceId] });
         toast({
           title: "Temporal Alert Detected!",
-          description: `Pattern detected across ${data.batchInfo?.frameCount || 6} frames over ${data.batchInfo?.durationSeconds || 10}s.`,
+          description: `Pattern detected across ${data.batchInfo?.frameCount || 7} frames over ${data.batchInfo?.durationSeconds || 12}s.`,
           variant: "destructive",
         });
       }
       setLastAnalysisTime(new Date());
+      scheduleNextBatchRef.current?.(data._promptId);
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables) => {
+      batchInFlightRef.current.delete(variables.promptId);
       console.error("Batch analysis error:", error);
+      console.log(`[BatchAnalysis] API error for prompt ${variables.promptId}, scheduling next batch after cooldown`);
       setBatchCaptureProgress(null);
       if (error.message.includes("unavailable") || error.message.includes("propagating") || error.message.includes("DNS")) {
         toast({
@@ -412,6 +420,7 @@ export default function Dashboard() {
           description: "The endpoint may still be initializing. Analysis will continue to retry.",
         });
       }
+      scheduleNextBatchRef.current?.(variables.promptId);
     },
   });
 
@@ -421,10 +430,11 @@ export default function Dashboard() {
     const schedules = promptSchedulesRef.current;
     schedules.forEach((schedule) => {
       if (schedule.intervalId) {
-        clearInterval(schedule.intervalId);
+        clearTimeout(schedule.intervalId);
       }
     });
     schedules.clear();
+    batchInFlightRef.current.clear();
   }, []);
 
   const getFrameWithFallback = useCallback(async (boundingBox: BoundingBox | null): Promise<string | null> => {
@@ -496,7 +506,7 @@ export default function Dashboard() {
           totalFrames: BATCH_FRAME_COUNT,
         });
         
-        console.log(`[BatchAnalysis] Sending ${frames.length} frames for temporal analysis over ${BATCH_DURATION_SECONDS}s`);
+        console.log(`[BatchAnalysis] Sending ${frames.length} frames for temporal analysis over ${BATCH_DURATION_SECONDS}s (guard stays active until API completes)`);
         analyzeBatchMutation.mutate({
           frames,
           promptId: prompt.id,
@@ -507,47 +517,64 @@ export default function Dashboard() {
       } else {
         console.log(`[BatchAnalysis] Insufficient frames captured (${frames.length}), skipping analysis`);
         setBatchCaptureProgress(null);
+        batchInFlightRef.current.delete(prompt.id);
       }
-    } finally {
+    } catch (error) {
+      console.error(`[BatchAnalysis] Error during batch capture:`, error);
+      setBatchCaptureProgress(null);
       batchInFlightRef.current.delete(prompt.id);
     }
   }, [getFrameWithFallback, analyzeBatchMutation, sceneAgentContext, BATCH_FRAME_COUNT, BATCH_INTERVAL_SECONDS, BATCH_DURATION_SECONDS]);
 
-  const schedulePrompt = useCallback((prompt: Prompt) => {
-    runBatchAnalysis(prompt);
+  const scheduleNextBatch = useCallback((promptId: string) => {
+    const schedules = promptSchedulesRef.current;
+    const currentPrompt = prompts.find(p => p.id === promptId);
+    
+    if (!currentPrompt || !currentPrompt.isActive || !isAnalyzing) {
+      console.log(`[BatchAnalysis] Not scheduling next batch for prompt ${promptId}: inactive or analysis stopped`);
+      schedules.delete(promptId);
+      return;
+    }
+    
+    const cooldownMs = currentPrompt.frequencySeconds * 1000;
+    console.log(`[BatchAnalysis] Scheduling next batch for prompt ${promptId} in ${currentPrompt.frequencySeconds}s`);
+    
+    const timeoutId = setTimeout(() => {
+      const prompt = prompts.find(p => p.id === promptId);
+      if (prompt && prompt.isActive && isAnalyzing) {
+        runBatchAnalysis(prompt);
+      }
+    }, cooldownMs);
+    
+    schedules.set(promptId, {
+      promptId,
+      frequency: currentPrompt.frequencySeconds,
+      nextRunAt: Date.now() + cooldownMs,
+      intervalId: timeoutId,
+    });
+  }, [prompts, isAnalyzing, runBatchAnalysis]);
 
+  useEffect(() => {
+    scheduleNextBatchRef.current = scheduleNextBatch;
+  }, [scheduleNextBatch]);
+
+  const schedulePrompt = useCallback((prompt: Prompt) => {
     const schedules = promptSchedulesRef.current;
     const existingSchedule = schedules.get(prompt.id);
     if (existingSchedule?.intervalId) {
-      clearInterval(existingSchedule.intervalId);
+      clearTimeout(existingSchedule.intervalId);
     }
-
-    const intervalId = setInterval(async () => {
-      const currentPrompt = prompts.find(p => p.id === prompt.id);
-      if (!currentPrompt || !currentPrompt.isActive) {
-        const schedule = schedules.get(prompt.id);
-        if (schedule?.intervalId) {
-          clearInterval(schedule.intervalId);
-          schedules.delete(prompt.id);
-        }
-        return;
-      }
-      
-      runBatchAnalysis(currentPrompt);
-      
-      const sched = schedules.get(prompt.id);
-      if (sched) {
-        sched.nextRunAt = Date.now() + currentPrompt.frequencySeconds * 1000;
-      }
-    }, prompt.frequencySeconds * 1000);
-
+    
+    console.log(`[BatchAnalysis] Starting initial batch for prompt ${prompt.id}`);
+    runBatchAnalysis(prompt);
+    
     schedules.set(prompt.id, {
       promptId: prompt.id,
       frequency: prompt.frequencySeconds,
-      nextRunAt: Date.now() + prompt.frequencySeconds * 1000,
-      intervalId,
+      nextRunAt: Date.now() + BATCH_DURATION_SECONDS * 1000,
+      intervalId: null,
     });
-  }, [runBatchAnalysis, prompts]);
+  }, [runBatchAnalysis, BATCH_DURATION_SECONDS]);
 
   const startAnalysis = useCallback(() => {
     if (activePrompts.length === 0) {
@@ -598,7 +625,7 @@ export default function Dashboard() {
       schedules.forEach((schedule, promptId) => {
         if (!currentPromptIds.has(promptId)) {
           if (schedule.intervalId) {
-            clearInterval(schedule.intervalId);
+            clearTimeout(schedule.intervalId);
           }
           schedules.delete(promptId);
         }
