@@ -18,7 +18,8 @@ A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision 
 - Source-specific profiles: Each video source maintains independent detection rules and settings
 - **ROI fix**: Fixed double-cropping bug where client-cropped frames were also getting ROI applied by Cosmos
 - **Smart Sampling**: Scene Agent waits for video loop restart, samples frames evenly across actual video duration (capped at 32s), ensuring chronological frame sequence
-- **scene_context field**: Cosmos API now accepts dedicated `scene_context` field on `/infer`, `/infer_batch`, and `/reason` endpoints - biases interpretation for risk, intent, and severity assessment without changing response contracts
+- **scene_context field**: Cosmos API accepts `scene_context` on `/infer` and `/infer_batch` (prepended as SCENE CONTEXT PRIORITY), and `context` on `/reason` - authoritative lens for interpretation biasing risk, intent, and severity
+- **Simplified API integration**: Server owns snapshot prompts for `/infer_batch` and synthesis logic for `/reason`. Client only sends images, timestamps, and optional scene_context; server handles prioritization, severity, and synthesis
 
 ### v1.2
 - Video upload capability: Users can upload MP4, WebM, OGG, or QuickTime videos (max 100MB)

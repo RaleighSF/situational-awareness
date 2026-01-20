@@ -640,30 +640,22 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
   const maxT = Math.max(...observations.map(o => Math.round(o.t)));
   const totalSeconds = Math.round(maxT > 0 ? maxT : observations.length * 5);
 
-  // Build synthesis prompt that grounds timeline in actual observations
-  const frameCount = observations.length;
-  const synthesisPrompt = `Create a timeline with ${frameCount} entries, one BRIEF event per observation timestamp (t=0, t=4, t=8, etc). Each timeline event should be 10-15 words max describing the key action or change at that moment. Focus on: what changed from the previous frame, notable actions, emerging situations. Do NOT invent events - only describe what is explicitly observed. Keep descriptions concise.`;
-
   // Truncate each observation to 3 sentences max to save tokens
   const truncatedObservations = observationsPayload.map(o => {
     const sentences = o.text.split(/(?<=[.!?])\s+/).slice(0, 3);
     return { t: Math.round(o.t), text: sentences.join(' ') };
   });
 
+  // Server handles synthesis from observations + context; no client prompt needed
   const payload: {
     observations: { t: number; text: string }[];
     total_seconds: number;
-    max_new_tokens: number;
-    prompt: string;
     context?: string;
   } = {
     observations: truncatedObservations,
     total_seconds: totalSeconds,
-    max_new_tokens: 2048,
-    prompt: synthesisPrompt,
   };
 
-  // Use 'context' field for /reason endpoint (server does not read scene_context on /reason)
   if (sceneContext) {
     payload.context = sceneContext;
     console.log(`[REASON] Including context: "${sceneContext.substring(0, 80)}..."`);
