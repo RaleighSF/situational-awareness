@@ -3,7 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import path from "path";
-import { seedDemoVideoSources, resetToDemo } from "./storage";
+import { seedDemoVideoSources } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -66,13 +66,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // In production, reset to clean demo state on each deployment
-  // In development, just sync missing sources
-  if (process.env.NODE_ENV === "production") {
-    await resetToDemo();
-  } else {
-    await seedDemoVideoSources();
-  }
+  // Sync missing demo sources without resetting existing data
+  // This preserves alerts, prompts, and user-created sources across deployments
+  await seedDemoVideoSources();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
