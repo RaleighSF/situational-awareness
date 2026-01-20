@@ -49,6 +49,20 @@ export const promptsRelations = relations(prompts, ({ one, many }) => ({
   alerts: many(alerts),
 }));
 
+export const batchMetaSchema = z.object({
+  mode: z.enum(["single", "batch"]),
+  frameCount: z.number().optional(),
+  intervalSeconds: z.number().optional(),
+  durationSeconds: z.number().optional(),
+  observations: z.array(z.object({
+    t: z.number(),
+    text: z.string(),
+  })).optional(),
+  synthesis: z.string().optional(),
+});
+
+export type BatchMeta = z.infer<typeof batchMetaSchema>;
+
 export const alerts = pgTable("alerts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   promptId: varchar("prompt_id").references(() => prompts.id),
@@ -57,6 +71,7 @@ export const alerts = pgTable("alerts", {
   analysisResult: text("analysis_result").notNull(),
   confidence: text("confidence"),
   isRead: boolean("is_read").default(false),
+  batchMeta: jsonb("batch_meta").$type<BatchMeta | null>(),
 });
 
 export const alertsRelations = relations(alerts, ({ one }) => ({
@@ -74,7 +89,9 @@ export const insertPromptSchema = createInsertSchema(prompts, {
   boundingBox: z.union([boundingBoxSchema, z.null()]).optional(),
 }).omit({ id: true });
 
-export const insertAlertSchema = createInsertSchema(alerts).omit({ id: true, timestamp: true });
+export const insertAlertSchema = createInsertSchema(alerts, {
+  batchMeta: z.union([batchMetaSchema, z.null()]).optional(),
+}).omit({ id: true, timestamp: true });
 
 export type InsertVideoSource = z.infer<typeof insertVideoSourceSchema>;
 export type InsertPrompt = z.infer<typeof insertPromptSchema>;
@@ -83,6 +100,16 @@ export type InsertAlert = z.infer<typeof insertAlertSchema>;
 export type VideoSource = typeof videoSources.$inferSelect;
 export type Prompt = typeof prompts.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
+
+export const batchAlertRequestSchema = z.object({
+  frames: z.array(z.string()).min(2).max(12),
+  promptId: z.string(),
+  intervalSeconds: z.number().min(1).max(30).default(2),
+  durationSeconds: z.number().min(1).max(60).optional(),
+  sceneContext: z.string().max(1000).optional(),
+});
+
+export type BatchAlertRequest = z.infer<typeof batchAlertRequestSchema>;
 
 export const sceneAgentConfigSchema = z.object({
   durationSeconds: z.number().min(10).max(120).default(20),

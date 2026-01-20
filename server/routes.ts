@@ -4,8 +4,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { storage, exportDemoSnapshot } from "./storage";
-import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema, sceneAgentSynthesisSchema, sourceSettingsSchema } from "@shared/schema";
-import type { BoundingBox, FrameObservation, SceneAgentSynthesis, SceneAgentResult } from "@shared/schema";
+import { insertPromptSchema, insertAlertSchema, sceneAgentRequestSchema, sceneAgentSynthesisSchema, sourceSettingsSchema, batchAlertRequestSchema } from "@shared/schema";
+import type { BoundingBox, FrameObservation, SceneAgentSynthesis, SceneAgentResult, BatchMeta } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { ObjectStorageService, ObjectNotFoundError } from "./replit_integrations/object_storage";
 
@@ -924,6 +924,93 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
   }
 }
 
+interface AlertSynthesisResult {
+  detected: boolean;
+  confidence: string;
+  analysis: string;
+  escalation?: string;
+}
+
+async function synthesizeForAlert(
+  observations: FrameObservation[], 
+  rulePrompt: string,
+  sceneContext?: string
+): Promise<AlertSynthesisResult> {
+  const observationsPayload = observations.map(o => ({
+    t: Math.round(o.t),
+    text: o.text,
+  }));
+
+  const maxT = Math.max(...observations.map(o => Math.round(o.t)));
+  const totalSeconds = Math.round(maxT > 0 ? maxT : observations.length * 2);
+
+  const payload: {
+    observations: { t: number; text: string }[];
+    total_seconds: number;
+    context?: string;
+  } = {
+    observations: observationsPayload,
+    total_seconds: totalSeconds,
+  };
+
+  if (sceneContext) {
+    payload.context = sceneContext;
+  }
+
+  const targetUrl = `${COSMOS_ENDPOINT}/reason`;
+  console.log(`[ALERT-SYNTHESIS] --> ${targetUrl} (${observations.length} observations)`);
+  const t0 = Date.now();
+
+  try {
+    const response = await fetch(targetUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const t1 = Date.now();
+    console.log(`[ALERT-SYNTHESIS] <-- status=${response.status} in ${t1 - t0}ms`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Cosmos /reason API error: ${response.status} - ${errorText}`);
+    }
+
+    const apiResult = await response.json();
+    const summaryText = apiResult.summary || "";
+    const escalationArr = Array.isArray(apiResult.escalation) ? apiResult.escalation : [];
+    const anomaliesArr = Array.isArray(apiResult.anomalies) ? apiResult.anomalies : [];
+    
+    const hasEscalation = escalationArr.length > 0 && escalationArr.some((e: string) => e && e !== "None");
+    const hasAnomalies = anomaliesArr.length > 0 && anomaliesArr.some((a: string) => a && a !== "None" && a !== "None observed");
+    const apiConfidence = typeof apiResult.confidence === 'number' ? apiResult.confidence : 0.5;
+    
+    const detected = hasEscalation || hasAnomalies || apiConfidence >= 0.7;
+    
+    let confidence: string;
+    if (apiConfidence >= 0.8) confidence = "HIGH";
+    else if (apiConfidence >= 0.5) confidence = "MEDIUM";
+    else confidence = "LOW";
+
+    const analysisText = summaryText || "Temporal analysis completed.";
+    const escalationText = escalationArr.filter((e: string) => e && e !== "None").join("; ");
+
+    return {
+      detected,
+      confidence,
+      analysis: analysisText.substring(0, 500),
+      escalation: escalationText || undefined,
+    };
+  } catch (error) {
+    console.error("[ALERT-SYNTHESIS] Error:", error);
+    return {
+      detected: false,
+      confidence: "LOW",
+      analysis: `Synthesis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    };
+  }
+}
+
 const DEFAULT_VIDEO_SOURCES = [
   {
     id: "loading-dock",
@@ -1330,6 +1417,92 @@ export async function registerRoutes(
           : errorMessage,
         endpointUnavailable: isEndpointUnavailable
       });
+    }
+  });
+
+  app.post("/api/analyze-batch", async (req, res) => {
+    try {
+      const parseResult = batchAlertRequestSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ 
+          error: "Invalid request", 
+          details: fromZodError(parseResult.error).message 
+        });
+      }
+
+      const { frames, promptId, intervalSeconds, durationSeconds: clientDuration, sceneContext } = parseResult.data;
+      const durationSeconds = clientDuration ?? (frames.length - 1) * intervalSeconds;
+
+      const prompt = await storage.getPrompt(promptId);
+      if (!prompt) {
+        return res.status(404).json({ error: "Prompt not found" });
+      }
+
+      console.log(`[ANALYZE-BATCH] Starting batch analysis: ${frames.length} frames, ${intervalSeconds}s intervals, ${durationSeconds}s total`);
+
+      const observations = await getBatchSceneObservations(frames, intervalSeconds, sceneContext);
+      
+      const ruleContextPrompt = `
+ALERT RULE EVALUATION
+Rule: "${prompt.prompt}"
+Scene Context: ${sceneContext || "Not specified"}
+
+You are evaluating whether the following observations from a ${durationSeconds}-second video sequence indicate the alert rule should be triggered.
+Consider the PROGRESSION of activity across frames - is the behavior escalating, persisting, or developing toward a concerning pattern?
+
+Observations:
+${observations.map(o => `[${o.t}s] ${o.text}`).join('\n')}
+
+Based on these observations, should this alert rule be triggered?
+Respond with a JSON object containing:
+- detected: true/false (does the pattern warrant an alert?)
+- confidence: "LOW" | "MEDIUM" | "HIGH"
+- analysis: A brief explanation of why the alert was or wasn't triggered
+- escalation: If detected, describe the escalating pattern observed
+`;
+
+      const synthesisResult = await synthesizeForAlert(observations, ruleContextPrompt, sceneContext);
+      
+      console.log(`[ANALYZE-BATCH] Synthesis complete: detected=${synthesisResult.detected}, confidence=${synthesisResult.confidence}`);
+
+      let alertCreated = false;
+      if (synthesisResult.detected) {
+        const batchMeta: BatchMeta = {
+          mode: "batch",
+          frameCount: frames.length,
+          intervalSeconds,
+          durationSeconds,
+          observations: observations.map(o => ({ t: o.t, text: o.text })),
+          synthesis: synthesisResult.analysis,
+        };
+
+        await storage.createAlert({
+          promptId: promptId,
+          frameData: frames[0],
+          analysisResult: synthesisResult.analysis,
+          confidence: synthesisResult.confidence,
+          isRead: false,
+          batchMeta,
+        });
+        alertCreated = true;
+      }
+
+      res.json({
+        detected: synthesisResult.detected,
+        analysis: synthesisResult.analysis,
+        confidence: synthesisResult.confidence,
+        observations: observations.map(o => ({ t: o.t, text: o.text })),
+        alertCreated,
+        batchInfo: {
+          frameCount: frames.length,
+          intervalSeconds,
+          durationSeconds,
+        }
+      });
+    } catch (error) {
+      console.error("[ANALYZE-BATCH] Error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to analyze batch";
+      res.status(500).json({ error: errorMessage });
     }
   });
 

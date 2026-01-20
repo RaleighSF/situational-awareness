@@ -124,6 +124,16 @@ export default function Dashboard() {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [uploadFileName, setUploadFileName] = useState("");
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  
+  const [batchCaptureProgress, setBatchCaptureProgress] = useState<{
+    promptId: string;
+    framesCollected: number;
+    totalFrames: number;
+  } | null>(null);
+  const batchInFlightRef = useRef<Set<string>>(new Set());
+  const BATCH_FRAME_COUNT = 7;
+  const BATCH_INTERVAL_SECONDS = 2;
+  const BATCH_DURATION_SECONDS = 12;
 
   const { data: videoSources = [], isLoading: sourcesLoading } = useQuery<VideoSource[]>({
     queryKey: ["/api/video-sources"],
@@ -366,6 +376,45 @@ export default function Dashboard() {
     },
   });
 
+  const analyzeBatchMutation = useMutation({
+    mutationFn: async (data: { 
+      frames: string[]; 
+      promptId: string; 
+      intervalSeconds: number;
+      durationSeconds?: number;
+      sceneContext?: string;
+    }) => {
+      const res = await apiRequest("POST", "/api/analyze-batch", data);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Batch analysis failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setBatchCaptureProgress(null);
+      if (data.alertCreated) {
+        queryClient.invalidateQueries({ queryKey: ["/api/alerts", currentVideoSourceId] });
+        toast({
+          title: "Temporal Alert Detected!",
+          description: `Pattern detected across ${data.batchInfo?.frameCount || 6} frames over ${data.batchInfo?.durationSeconds || 10}s.`,
+          variant: "destructive",
+        });
+      }
+      setLastAnalysisTime(new Date());
+    },
+    onError: (error: Error) => {
+      console.error("Batch analysis error:", error);
+      setBatchCaptureProgress(null);
+      if (error.message.includes("unavailable") || error.message.includes("propagating") || error.message.includes("DNS")) {
+        toast({
+          title: "Cosmos Endpoint Unavailable",
+          description: "The endpoint may still be initializing. Analysis will continue to retry.",
+        });
+      }
+    },
+  });
+
   const activePrompts = prompts.filter((p) => p.isActive);
 
   const clearAllSchedules = useCallback(() => {
@@ -410,19 +459,62 @@ export default function Dashboard() {
     return null;
   }, []);
 
-  const schedulePrompt = useCallback((prompt: Prompt) => {
-    const runAnalysis = async () => {
-      const frameData = await getFrameWithFallback(prompt.boundingBox);
-      if (frameData) {
-        analyzeFrameMutation.mutate({
-          frameData,
+  const runBatchAnalysis = useCallback(async (prompt: Prompt) => {
+    if (batchInFlightRef.current.has(prompt.id)) {
+      console.log(`[BatchAnalysis] Batch already in-flight for prompt ${prompt.id}, skipping`);
+      return;
+    }
+    
+    batchInFlightRef.current.add(prompt.id);
+    const frames: string[] = [];
+    
+    console.log(`[BatchAnalysis] Starting batch capture for prompt ${prompt.id}: ${BATCH_FRAME_COUNT} frames @ ${BATCH_INTERVAL_SECONDS}s intervals = ${BATCH_DURATION_SECONDS}s`);
+    
+    try {
+      for (let i = 0; i < BATCH_FRAME_COUNT; i++) {
+        setBatchCaptureProgress({
           promptId: prompt.id,
+          framesCollected: i,
+          totalFrames: BATCH_FRAME_COUNT,
+        });
+        
+        const frame = await getFrameWithFallback(prompt.boundingBox);
+        if (frame) {
+          frames.push(frame);
+          console.log(`[BatchAnalysis] Captured frame ${i + 1}/${BATCH_FRAME_COUNT}`);
+        }
+        
+        if (i < BATCH_FRAME_COUNT - 1) {
+          await new Promise(resolve => setTimeout(resolve, BATCH_INTERVAL_SECONDS * 1000));
+        }
+      }
+      
+      if (frames.length >= 2) {
+        setBatchCaptureProgress({
+          promptId: prompt.id,
+          framesCollected: BATCH_FRAME_COUNT,
+          totalFrames: BATCH_FRAME_COUNT,
+        });
+        
+        console.log(`[BatchAnalysis] Sending ${frames.length} frames for temporal analysis over ${BATCH_DURATION_SECONDS}s`);
+        analyzeBatchMutation.mutate({
+          frames,
+          promptId: prompt.id,
+          intervalSeconds: BATCH_INTERVAL_SECONDS,
+          durationSeconds: BATCH_DURATION_SECONDS,
           sceneContext: sceneAgentContext || undefined,
         });
+      } else {
+        console.log(`[BatchAnalysis] Insufficient frames captured (${frames.length}), skipping analysis`);
+        setBatchCaptureProgress(null);
       }
-    };
+    } finally {
+      batchInFlightRef.current.delete(prompt.id);
+    }
+  }, [getFrameWithFallback, analyzeBatchMutation, sceneAgentContext, BATCH_FRAME_COUNT, BATCH_INTERVAL_SECONDS, BATCH_DURATION_SECONDS]);
 
-    runAnalysis();
+  const schedulePrompt = useCallback((prompt: Prompt) => {
+    runBatchAnalysis(prompt);
 
     const schedules = promptSchedulesRef.current;
     const existingSchedule = schedules.get(prompt.id);
@@ -440,14 +532,9 @@ export default function Dashboard() {
         }
         return;
       }
-      const frame = await getFrameWithFallback(currentPrompt.boundingBox);
-      if (frame) {
-        analyzeFrameMutation.mutate({
-          frameData: frame,
-          promptId: currentPrompt.id,
-          sceneContext: sceneAgentContext || undefined,
-        });
-      }
+      
+      runBatchAnalysis(currentPrompt);
+      
       const sched = schedules.get(prompt.id);
       if (sched) {
         sched.nextRunAt = Date.now() + currentPrompt.frequencySeconds * 1000;
@@ -460,7 +547,7 @@ export default function Dashboard() {
       nextRunAt: Date.now() + prompt.frequencySeconds * 1000,
       intervalId,
     });
-  }, [analyzeFrameMutation, prompts, getFrameWithFallback]);
+  }, [runBatchAnalysis, prompts]);
 
   const startAnalysis = useCallback(() => {
     if (activePrompts.length === 0) {
@@ -1026,6 +1113,7 @@ export default function Dashboard() {
               isAnalyzing={isAnalyzing}
               activePromptCount={activePrompts.length}
               lastAnalysisTime={lastAnalysisTime}
+              batchCaptureProgress={batchCaptureProgress}
               onToggleAnalysis={() => {
                 if (isAnalyzing) {
                   stopAnalysis();

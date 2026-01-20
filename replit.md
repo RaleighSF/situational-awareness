@@ -1,15 +1,23 @@
 # Situational Awareness Demo
 
-**Version 1.4** - Production Ready (January 2026)
+**Version 1.5** - Temporal Batch Alerting (January 2026)
 
 A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision language model for security monitoring and situational awareness.
 
 ## Version History
 
-### v1.4 (Current) - Production Ready Checkpoint
+### v1.5 (Current) - Temporal Batch Alerting
+- **Batch Alerting**: Detection rules now capture 7 frames over 12 seconds (2s intervals) for temporal pattern analysis
+- **Escalating Behavior Detection**: Detects concerning patterns across time (burglar casing, conveyor jams, safety violations)
+- **In-flight Guards**: Prevents overlapping batch captures when frequency intervals are shorter than capture duration
+- **Timeline UI**: Alert detail modal shows per-frame observations timeline with timestamps
+- **Preserved Single-frame Testing**: "Capture & Test" functionality retained for prompt tuning
+- New endpoint: `POST /api/analyze-batch` - calls `/infer_batch` then `/reason` for temporal synthesis
+- BatchMeta type: stores frameCount, intervalSeconds, durationSeconds, observations, synthesis
+
+### v1.4 - Production Ready Checkpoint
 - **Demo Snapshot System**: Export dev data via `POST /api/demo/export-snapshot`, auto-import on production deployment
 - Complete demo workflow: Stage perfect examples in dev → export snapshot → deploy to prod with identical data
-- Git commit: `12c8d1dee31c549e5240376deedf3cd97106761f` (Published)
 
 ### v1.3 - Major Release
 - **Mark Count mode**: OpenAI-powered classification routes counting queries to `/infer` with `mode="mark_count"`
