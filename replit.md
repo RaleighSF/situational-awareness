@@ -1,19 +1,23 @@
 # Situational Awareness Demo
 
-**Version 1.3** - Major Release (January 2026)
+**Version 1.4** - Production Ready (January 2026)
 
 A demo application showcasing the capabilities of NVIDIA Cosmos Reason 2 vision language model for security monitoring and situational awareness.
 
 ## Version History
 
-### v1.3 (Current) - Major Release
+### v1.4 (Current) - Production Ready Checkpoint
+- **Demo Snapshot System**: Export dev data via `POST /api/demo/export-snapshot`, auto-import on production deployment
+- Complete demo workflow: Stage perfect examples in dev → export snapshot → deploy to prod with identical data
+- Git commit: `12c8d1dee31c549e5240376deedf3cd97106761f` (Published)
+
+### v1.3 - Major Release
 - **Mark Count mode**: OpenAI-powered classification routes counting queries to `/infer` with `mode="mark_count"`
 - Counting intent detection: "How many...", "Count the...", "Number of...", inventory-style questions
 - Structured count responses: Returns count, items with labels/confidence, and optional notes
 - Non-counting queries (descriptions, reasoning, summaries) route to `mode="qa"`
 - **Cosmos API v2 integration**: Full alignment with server response format
 - Scene Agent improvements: Timeline events, persistent elements, changes tracking, escalation handling
-- Production stability: Demo snapshot system - export dev data and deploy to production for identical demo experiences
 - Quick Frame Analysis: Camera icon opens modal for ad-hoc questions about captured frames
 - Source-specific profiles: Each video source maintains independent detection rules and settings
 - **ROI fix**: Fixed double-cropping bug where client-cropped frames were also getting ROI applied by Cosmos
