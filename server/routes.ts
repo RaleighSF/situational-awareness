@@ -186,37 +186,82 @@ async function analyzeWithCosmos(
   const roi = boundingBoxToROI(boundingBox);
 
   // Rule Hardener: Transforms user business intent into a reliable detection prompt.
-  // Enforces strict visual evidence, conservative decisioning, and consistent output.
+  // Handles both ABSENCE checks (missing PPE) and PRESENCE checks (suspicious behavior).
   // Scene context is sent separately as priority lens via the API's scene_context field.
   const wrappedPrompt = `=== DETECTION PROTOCOL ===
+You are an automated visual monitoring system evaluating whether the CONDITION below is met.
+The CONDITION may involve the PRESENCE of a behavior/event or the ABSENCE of a required item/state.
 
-You are a security/safety monitoring system evaluating whether the CONDITION below is met.
+STEP 1 — CLASSIFY THE RULE TYPE (MANDATORY):
+Determine which category the CONDITION belongs to:
+A) ABSENCE CHECK — something must be missing (e.g., missing PPE, missing badge, door left open)
+B) PRESENCE CHECK — something must be occurring (e.g., suspicious activity, loitering, unsafe act, productivity violation)
 
-CRITICAL - HOW TO DETECT "MISSING" ITEMS:
-When checking if someone is MISSING safety gear (goggles, gloves, helmet, vest, etc.):
-- If you can see the person's face/hands/body clearly AND the required gear is NOT visibly ON them → THE GEAR IS MISSING → DETECTED: YES
-- "Missing goggles" means: I can see their face, but I do NOT see goggles on their face
-- "Missing gloves" means: I can see their hands, but I do NOT see gloves on their hands
-- You must POSITIVELY IDENTIFY the gear being worn. A bare face = missing goggles. Bare hands = missing gloves.
-- Do NOT invent or assume gear is present. If you cannot see it ON the person, it is NOT there.
+Apply the correct evidence rules below based on the rule type.
 
-EVIDENCE REQUIREMENTS:
-1. To mark DETECTED: NO, you must see CLEAR VISUAL PROOF that the person IS wearing the required gear.
-2. A visible face without goggles = goggles are missing, period.
-3. Visible hands without gloves = gloves are missing, period.
-4. Never say "appears to be wearing appropriate PPE" unless you can specifically identify and describe the gear.
-5. When in doubt, trigger the alert (DETECTED: YES).
+--------------------------------------------------
+GENERAL RULES (ALWAYS APPLY):
+- Base conclusions ONLY on what is visible in the image.
+- Do NOT assume compliance, intent, or context.
+- Do NOT invent or hallucinate objects, equipment, or behavior.
+- If key evidence is unclear due to blur, occlusion, angle, or cropping, say so explicitly.
+- Never give the benefit of the doubt.
+- Be concise, factual, and specific.
 
-FORBIDDEN RESPONSES:
-- Do NOT say "no signs of missing X" when you simply see the person without X
-- Do NOT assume compliance - you must SEE the gear to confirm it
-- Do NOT give benefit of the doubt
+--------------------------------------------------
+ABSENCE CHECK — HOW TO DETECT MISSING ITEMS:
+Use these rules ONLY if the CONDITION is an ABSENCE CHECK.
 
-RESPONSE FORMAT (exactly):
-DETECTED: [YES or NO]
-CONFIDENCE: [HIGH, MEDIUM, or LOW]  
-ANALYSIS: [Describe what gear you can/cannot see on the person. Be specific: "I can see her face clearly - no goggles visible" or "I can see gloves on both hands"]
+DEFINITION:
+- A required item is MISSING if the relevant body area or location is clearly visible AND the item is NOT visibly present.
 
+MANDATORY EVIDENCE RULES:
+1. To output DETECTED: NO, you MUST explicitly name the item you see and where it is worn/located.
+   (Example: "Clear safety goggles covering both eyes", "Protective gloves on both hands")
+2. If you can see the face clearly and do NOT see goggles → goggles are missing.
+3. If you can see the hands clearly and do NOT see gloves → gloves are missing.
+4. If the required area is partially or fully obscured → DETECTED: YES with LOW confidence.
+5. If unsure, trigger the alert.
+
+FORBIDDEN (ABSENCE CHECKS):
+- Do NOT say "appears compliant" without naming visible evidence.
+- Do NOT assume PPE or equipment is present.
+- Do NOT say "no violation" unless you can explicitly prove compliance.
+
+--------------------------------------------------
+PRESENCE CHECK — HOW TO DETECT BEHAVIOR / EVENTS:
+Use these rules ONLY if the CONDITION is a PRESENCE CHECK.
+
+DEFINITION:
+- DETECTED: YES requires observable cues that align with the CONDITION.
+
+Examples of valid observable cues (use only those relevant to the CONDITION):
+- Repeated lingering, circling, or unnecessary presence
+- Approaching windows, doors, or restricted areas
+- Peering inside, testing access points, checking surroundings
+- Prolonged inactivity where productivity is expected
+- Unsafe actions, policy violations, or restricted access
+- Escalation or persistence of behavior across the scene
+
+EVIDENCE STANDARD:
+- DETECTED: YES if you observe:
+  • at least ONE strong cue, OR
+  • at least TWO moderate cues consistent with the CONDITION
+- DETECTED: NO only if observed behavior clearly contradicts the CONDITION.
+- If behavior is ambiguous but concerning → DETECTED: YES with LOW confidence and explain why.
+
+FORBIDDEN (PRESENCE CHECKS):
+- Do NOT label behavior suspicious without naming specific visible cues.
+- Do NOT infer intent without observable actions.
+- Do NOT rely on clothing or appearance alone unless explicitly stated in the CONDITION.
+
+--------------------------------------------------
+RESPONSE FORMAT (STRICT — EXACTLY 3 LINES):
+DETECTED: YES or NO
+CONFIDENCE: HIGH | MEDIUM | LOW
+ANALYSIS: Brief explanation citing specific visible evidence or lack thereof.
+
+--------------------------------------------------
 === CONDITION TO EVALUATE ===
 ${prompt}`;
 
