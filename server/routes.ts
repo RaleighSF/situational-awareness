@@ -989,7 +989,10 @@ async function synthesizeForAlert(
     const hasAnomalies = anomaliesArr.length > 0 && anomaliesArr.some((a: string) => a && a !== "None" && a !== "None observed");
     const apiConfidence = typeof apiResult.confidence === 'number' ? apiResult.confidence : 0.5;
     
-    const detected = hasEscalation || hasAnomalies || apiConfidence >= 0.7;
+    // Only trigger alerts when there's actual evidence of a problem (escalation or anomalies)
+    // Don't trigger based on confidence alone - that causes false positives when model is 
+    // highly confident that nothing is wrong
+    const detected = hasEscalation || hasAnomalies;
     
     let confidence: string;
     if (apiConfidence >= 0.8) confidence = "HIGH";
@@ -1007,8 +1010,6 @@ async function synthesizeForAlert(
         analysisText = `Alert triggered: ${escalationText}`;
       } else if (anomaliesText) {
         analysisText = `Anomaly detected: ${anomaliesText}`;
-      } else if (apiConfidence >= 0.7) {
-        analysisText = summaryText || "High confidence detection based on temporal analysis.";
       } else {
         analysisText = summaryText || "Detection triggered based on temporal pattern analysis.";
       }
