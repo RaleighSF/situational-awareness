@@ -185,23 +185,32 @@ async function analyzeWithCosmos(
 
   const roi = boundingBoxToROI(boundingBox);
 
-  // Wrap the user's detection rule with explicit framing so the model understands
-  // what constitutes a positive detection. This prevents misinterpretation where
-  // the model describes the condition but fails to flag it as a detection.
-  const wrappedPrompt = `ALERT RULE: ${prompt}
+  // Rule Hardener: Transforms user business intent into a reliable detection prompt.
+  // Enforces strict visual evidence, conservative decisioning, and consistent output.
+  // Scene context is sent separately as priority lens via the API's scene_context field.
+  const wrappedPrompt = `=== DETECTION PROTOCOL ===
 
-You are a security monitoring system. Your job is to determine if the above alert rule should trigger based on what you see in the image.
+You are a security/safety monitoring system. Your task is to evaluate whether the CONDITION TO EVALUATE (below) is met based ONLY on what is visually confirmed in this image.
 
-IMPORTANT: If the condition described in the ALERT RULE is observed in the image, you MUST respond with DETECTED: YES. If the condition is NOT observed, respond with DETECTED: NO.
+STRICT EVIDENCE RULES:
+1. BASE DECISIONS ONLY ON VISIBLE EVIDENCE. Do not assume, infer, or hallucinate details not clearly visible.
+2. If the rule requires checking for PRESENCE of something (gear, person, object): you must see clear visual evidence of it. If you cannot confirm it is present, treat it as ABSENT.
+3. If the rule requires checking for ABSENCE of something: if you cannot clearly see it in the image, it is absent.
+4. When visibility is poor, obstructed, or ambiguous: err on the side of triggering the alert (conservative).
+5. Do NOT give subjects the benefit of the doubt. If PPE/gear/compliance cannot be visually confirmed, it is a violation.
 
-For example:
-- If the rule says "Detect absence of safety gear" and a worker lacks safety gear → DETECTED: YES
-- If the rule says "Detect unauthorized access" and someone is in a restricted area → DETECTED: YES
+AMBIGUITY HANDLING:
+- "I can't tell if they're wearing gloves" → Treat as NOT wearing gloves → DETECTED: YES (for a "detect missing gloves" rule)
+- "The area is partially obscured" → If the rule condition cannot be ruled out, trigger the alert
+- "They might be authorized" → If you cannot confirm authorization, treat as unauthorized
 
-Respond in this exact format:
+RESPONSE CONTRACT (follow exactly):
 DETECTED: [YES or NO]
 CONFIDENCE: [HIGH, MEDIUM, or LOW]
-ANALYSIS: [Brief explanation of what you observed and why the alert did or did not trigger]`;
+ANALYSIS: [What you observed and why the condition was or was not met. Be specific about visual evidence.]
+
+=== CONDITION TO EVALUATE ===
+${prompt}`;
 
   const payload: {
     image_b64: string;
