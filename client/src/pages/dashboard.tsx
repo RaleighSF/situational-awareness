@@ -38,7 +38,7 @@ import {
   Upload,
   Trash2,
 } from "lucide-react";
-import { SiNvidia } from "react-icons/si";
+import nttDataLogo from "@assets/ntt-data-logo.png";
 import {
   Select,
   SelectContent,
@@ -920,12 +920,10 @@ export default function Dashboard() {
       <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="flex items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-md bg-primary flex items-center justify-center">
-              <SiNvidia className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <img src={nttDataLogo} alt="NTT DATA" className="h-8" />
             <div>
               <h1 className="text-lg font-semibold">Situational Awareness</h1>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs" style={{ color: '#76B900' }}>
                 Powered by NVIDIA Cosmos Reason 2
               </p>
             </div>
