@@ -190,24 +190,32 @@ async function analyzeWithCosmos(
   // Scene context is sent separately as priority lens via the API's scene_context field.
   const wrappedPrompt = `=== DETECTION PROTOCOL ===
 
-You are a security/safety monitoring system. Your task is to evaluate whether the CONDITION TO EVALUATE (below) is met based ONLY on what is visually confirmed in this image.
+You are a security/safety monitoring system evaluating whether the CONDITION below is met.
 
-STRICT EVIDENCE RULES:
-1. BASE DECISIONS ONLY ON VISIBLE EVIDENCE. Do not assume, infer, or hallucinate details not clearly visible.
-2. If the rule requires checking for PRESENCE of something (gear, person, object): you must see clear visual evidence of it. If you cannot confirm it is present, treat it as ABSENT.
-3. If the rule requires checking for ABSENCE of something: if you cannot clearly see it in the image, it is absent.
-4. When visibility is poor, obstructed, or ambiguous: err on the side of triggering the alert (conservative).
-5. Do NOT give subjects the benefit of the doubt. If PPE/gear/compliance cannot be visually confirmed, it is a violation.
+CRITICAL - HOW TO DETECT "MISSING" ITEMS:
+When checking if someone is MISSING safety gear (goggles, gloves, helmet, vest, etc.):
+- If you can see the person's face/hands/body clearly AND the required gear is NOT visibly ON them → THE GEAR IS MISSING → DETECTED: YES
+- "Missing goggles" means: I can see their face, but I do NOT see goggles on their face
+- "Missing gloves" means: I can see their hands, but I do NOT see gloves on their hands
+- You must POSITIVELY IDENTIFY the gear being worn. A bare face = missing goggles. Bare hands = missing gloves.
+- Do NOT invent or assume gear is present. If you cannot see it ON the person, it is NOT there.
 
-AMBIGUITY HANDLING:
-- "I can't tell if they're wearing gloves" → Treat as NOT wearing gloves → DETECTED: YES (for a "detect missing gloves" rule)
-- "The area is partially obscured" → If the rule condition cannot be ruled out, trigger the alert
-- "They might be authorized" → If you cannot confirm authorization, treat as unauthorized
+EVIDENCE REQUIREMENTS:
+1. To mark DETECTED: NO, you must see CLEAR VISUAL PROOF that the person IS wearing the required gear.
+2. A visible face without goggles = goggles are missing, period.
+3. Visible hands without gloves = gloves are missing, period.
+4. Never say "appears to be wearing appropriate PPE" unless you can specifically identify and describe the gear.
+5. When in doubt, trigger the alert (DETECTED: YES).
 
-RESPONSE CONTRACT (follow exactly):
+FORBIDDEN RESPONSES:
+- Do NOT say "no signs of missing X" when you simply see the person without X
+- Do NOT assume compliance - you must SEE the gear to confirm it
+- Do NOT give benefit of the doubt
+
+RESPONSE FORMAT (exactly):
 DETECTED: [YES or NO]
-CONFIDENCE: [HIGH, MEDIUM, or LOW]
-ANALYSIS: [What you observed and why the condition was or was not met. Be specific about visual evidence.]
+CONFIDENCE: [HIGH, MEDIUM, or LOW]  
+ANALYSIS: [Describe what gear you can/cannot see on the person. Be specific: "I can see her face clearly - no goggles visible" or "I can see gloves on both hands"]
 
 === CONDITION TO EVALUATE ===
 ${prompt}`;
