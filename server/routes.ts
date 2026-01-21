@@ -185,6 +185,24 @@ async function analyzeWithCosmos(
 
   const roi = boundingBoxToROI(boundingBox);
 
+  // Wrap the user's detection rule with explicit framing so the model understands
+  // what constitutes a positive detection. This prevents misinterpretation where
+  // the model describes the condition but fails to flag it as a detection.
+  const wrappedPrompt = `ALERT RULE: ${prompt}
+
+You are a security monitoring system. Your job is to determine if the above alert rule should trigger based on what you see in the image.
+
+IMPORTANT: If the condition described in the ALERT RULE is observed in the image, you MUST respond with DETECTED: YES. If the condition is NOT observed, respond with DETECTED: NO.
+
+For example:
+- If the rule says "Detect absence of safety gear" and a worker lacks safety gear → DETECTED: YES
+- If the rule says "Detect unauthorized access" and someone is in a restricted area → DETECTED: YES
+
+Respond in this exact format:
+DETECTED: [YES or NO]
+CONFIDENCE: [HIGH, MEDIUM, or LOW]
+ANALYSIS: [Brief explanation of what you observed and why the alert did or did not trigger]`;
+
   const payload: {
     image_b64: string;
     prompt: string;
@@ -194,7 +212,7 @@ async function analyzeWithCosmos(
     scene_context?: string;
   } = {
     image_b64: base64Data,
-    prompt: prompt,
+    prompt: wrappedPrompt,
     mode: "detect",
     max_new_tokens: 256,
   };
