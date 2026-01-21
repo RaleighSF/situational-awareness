@@ -189,13 +189,24 @@ async function analyzeWithCosmos(
   // Handles both ABSENCE checks (missing PPE) and PRESENCE checks (suspicious behavior).
   // Scene context is sent separately as priority lens via the API's scene_context field.
   const wrappedPrompt = `=== DETECTION PROTOCOL ===
-You are an automated visual monitoring system evaluating whether the CONDITION below is met.
-The CONDITION may involve the PRESENCE of a behavior/event or the ABSENCE of a required item/state.
+You are an automated visual monitoring system. Your job is to determine if an ALERT should fire.
 
-STEP 1 — CLASSIFY THE RULE TYPE (MANDATORY):
-Determine which category the CONDITION belongs to:
-A) ABSENCE CHECK — something must be missing (e.g., missing PPE, missing badge, door left open)
-B) PRESENCE CHECK — something must be occurring (e.g., suspicious activity, loitering, unsafe act, productivity violation)
+CRITICAL — WHAT "DETECTED" MEANS:
+- DETECTED: YES = The alert condition IS met → FIRE THE ALERT
+- DETECTED: NO = The alert condition is NOT met → Do not fire
+
+FOR ABSENCE RULES (e.g., "Alert if missing goggles"):
+- If goggles are MISSING → the condition IS met → DETECTED: YES (fire alert)
+- If goggles are PRESENT → the condition is NOT met → DETECTED: NO
+
+FOR PRESENCE RULES (e.g., "Alert if loitering"):
+- If loitering IS observed → the condition IS met → DETECTED: YES (fire alert)
+- If loitering is NOT observed → the condition is NOT met → DETECTED: NO
+
+--------------------------------------------------
+STEP 1 — CLASSIFY THE RULE TYPE:
+A) ABSENCE CHECK — alert when something is missing (e.g., missing PPE, missing badge)
+B) PRESENCE CHECK — alert when something is occurring (e.g., suspicious activity, loitering)
 
 Apply the correct evidence rules below based on the rule type.
 
