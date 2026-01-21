@@ -188,99 +188,50 @@ async function analyzeWithCosmos(
   // Rule Hardener: Transforms user business intent into a reliable detection prompt.
   // Handles both ABSENCE checks (missing PPE) and PRESENCE checks (suspicious behavior).
   // Scene context is sent separately as priority lens via the API's scene_context field.
-  const wrappedPrompt = `=== DETECTION PROTOCOL ===
-You are an automated visual monitoring system. Your job is to determine if an ALERT should fire.
+  const wrappedPrompt = `=== VISUAL ALERT EVALUATION (STRICT) ===
+You are an automated visual monitoring system. Decide whether an ALERT should fire for the CONDITION.
 
-CRITICAL — WHAT "DETECTED" MEANS:
 DETECTED answers: "Should the alert fire?"
-- DETECTED: YES = The alert should fire
-- DETECTED: NO = The alert should not fire
+- DETECTED: YES  => alert should fire
+- DETECTED: NO   => alert should NOT fire
 
-WORKED EXAMPLE (read carefully):
+WORKED EXAMPLE — ABSENCE RULE:
 Rule: "Alert if workers are missing safety goggles"
-Observation: Worker's face is visible, no goggles on their face
-Question: Should the alert fire? YES — goggles are missing!
-Correct answer: DETECTED: YES
+Image: Worker's face is clearly visible, no goggles on face
+Answer: DETECTED: YES (goggles are missing → alert fires)
 
-ANOTHER EXAMPLE:
-Rule: "Alert if workers are missing safety goggles"  
-Observation: Worker is wearing safety goggles on their face
-Question: Should the alert fire? NO — goggles are present
-Correct answer: DETECTED: NO
+WORKED EXAMPLE — ABSENCE RULE (compliant):
+Rule: "Alert if workers are missing safety goggles"
+Image: Worker wearing safety goggles covering eyes
+Answer: DETECTED: NO (goggles are present → no alert)
 
-KEY INSIGHT FOR ABSENCE RULES:
-"Missing X" means "X is not there". If you don't see the item → it's missing → alert fires → DETECTED: YES
+STEP 1 — CLASSIFY THE CONDITION TYPE (internally):
+A) ABSENCE RULE: missing/without/not wearing/no X/absence of X/failed to X
+B) PRESENCE RULE: suspicious activity/loitering/tailgating/unsafe act/policy violation/productivity issue/etc.
 
---------------------------------------------------
-STEP 1 — CLASSIFY THE RULE TYPE:
-A) ABSENCE CHECK — alert when something is missing (e.g., missing PPE, missing badge)
-B) PRESENCE CHECK — alert when something is occurring (e.g., suspicious activity, loitering)
+GENERAL RULES:
+- Use ONLY what is visible. Do not assume compliance or intent.
+- Do not invent PPE/objects. If you cannot clearly see the required evidence, say so.
+- If evidence is unclear/occluded/too small/blurred: lean toward firing with LOW confidence when safety/security risk is plausible.
 
-Apply the correct evidence rules below based on the rule type.
+ABSENCE RULE LOGIC (apply only if type A):
+- "Missing X" means X is NOT visibly present where it should be.
+- DETECTED: NO is allowed ONLY if you explicitly see and name the required item(s) being worn/used correctly.
+- If the relevant area is visible and you do NOT see the required item => DETECTED: YES.
+- If the relevant area is not clearly visible (occluded/too small/blurred) => DETECTED: YES with LOW confidence (state what is unclear).
 
---------------------------------------------------
-GENERAL RULES (ALWAYS APPLY):
-- Base conclusions ONLY on what is visible in the image.
-- Do NOT assume compliance, intent, or context.
-- Do NOT invent or hallucinate objects, equipment, or behavior.
-- If key evidence is unclear due to blur, occlusion, angle, or cropping, say so explicitly.
-- Never give the benefit of the doubt.
-- Be concise, factual, and specific.
+PRESENCE RULE LOGIC (apply only if type B):
+- DETECTED: YES requires observable cues consistent with the condition.
+- Trigger YES if you observe (a) one strong cue OR (b) two moderate cues.
+  Examples of cues (use only those relevant): approaching entry points/windows, peering in, checking surroundings,
+  repeated lingering/circling, restricted-area access attempts, unsafe actions, prolonged inactivity where work is expected.
+- DETECTED: NO only if what you see clearly contradicts the condition or shows normal/benign activity.
 
---------------------------------------------------
-ABSENCE CHECK — HOW TO DETECT MISSING ITEMS:
-Use these rules ONLY if the CONDITION is an ABSENCE CHECK.
-
-DEFINITION:
-- A required item is MISSING if the relevant body area or location is clearly visible AND the item is NOT visibly present.
-
-MANDATORY EVIDENCE RULES:
-1. To output DETECTED: NO, you MUST explicitly name the item you see and where it is worn/located.
-   (Example: "Clear safety goggles covering both eyes", "Protective gloves on both hands")
-2. If you can see the face clearly and do NOT see goggles → goggles are missing.
-3. If you can see the hands clearly and do NOT see gloves → gloves are missing.
-4. If the required area is partially or fully obscured → DETECTED: YES with LOW confidence.
-5. If unsure, trigger the alert.
-
-FORBIDDEN (ABSENCE CHECKS):
-- Do NOT say "appears compliant" without naming visible evidence.
-- Do NOT assume PPE or equipment is present.
-- Do NOT say "no violation" unless you can explicitly prove compliance.
-
---------------------------------------------------
-PRESENCE CHECK — HOW TO DETECT BEHAVIOR / EVENTS:
-Use these rules ONLY if the CONDITION is a PRESENCE CHECK.
-
-DEFINITION:
-- DETECTED: YES requires observable cues that align with the CONDITION.
-
-Examples of valid observable cues (use only those relevant to the CONDITION):
-- Repeated lingering, circling, or unnecessary presence
-- Approaching windows, doors, or restricted areas
-- Peering inside, testing access points, checking surroundings
-- Prolonged inactivity where productivity is expected
-- Unsafe actions, policy violations, or restricted access
-- Escalation or persistence of behavior across the scene
-
-EVIDENCE STANDARD:
-- DETECTED: YES if you observe:
-  • at least ONE strong cue, OR
-  • at least TWO moderate cues consistent with the CONDITION
-- DETECTED: NO only if observed behavior clearly contradicts the CONDITION.
-- If behavior is ambiguous but concerning → DETECTED: YES with LOW confidence and explain why.
-
-FORBIDDEN (PRESENCE CHECKS):
-- Do NOT label behavior suspicious without naming specific visible cues.
-- Do NOT infer intent without observable actions.
-- Do NOT rely on clothing or appearance alone unless explicitly stated in the CONDITION.
-
---------------------------------------------------
-RESPONSE FORMAT (STRICT — EXACTLY 3 LINES):
+RESPONSE FORMAT (EXACTLY 3 LINES; NO EXTRA TEXT):
 DETECTED: YES or NO
 CONFIDENCE: HIGH | MEDIUM | LOW
-ANALYSIS: Brief explanation citing specific visible evidence or lack thereof.
+ANALYSIS: 1–2 sentences citing specific visible evidence (or what is unclear) and why that makes the alert fire or not.
 
---------------------------------------------------
 === CONDITION TO EVALUATE ===
 ${prompt}`;
 
