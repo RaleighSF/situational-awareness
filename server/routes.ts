@@ -1088,15 +1088,25 @@ async function synthesizeForAlert(
       }
       
       // Look for timestamp references like "[8s]" or "at 8s" or "t=8s"
+      // Find ALL timestamps and use the LATEST one (shows culmination of violation)
       if (offendingFrameIndex === undefined) {
-        const timeMatch = allResponseText.match(/\[(\d+)\s*s\]|at\s+(\d+)\s*s(?:econds?)?|t\s*=\s*(\d+)\s*s/i);
-        if (timeMatch) {
-          const seconds = parseInt(timeMatch[1] || timeMatch[2] || timeMatch[3], 10);
+        const timestampRegex = /\[(\d+)\s*s\]|at\s+(\d+)\s*s(?:econds?)?|t\s*=\s*(\d+)\s*s/gi;
+        let match;
+        let latestTimestamp = -1;
+        
+        while ((match = timestampRegex.exec(allResponseText)) !== null) {
+          const seconds = parseInt(match[1] || match[2] || match[3], 10);
+          if (seconds > latestTimestamp) {
+            latestTimestamp = seconds;
+          }
+        }
+        
+        if (latestTimestamp >= 0) {
           // Find the observation closest to this timestamp
           let closestIdx = 0;
           let closestDiff = Infinity;
           observations.forEach((obs, idx) => {
-            const diff = Math.abs(Math.round(obs.t) - seconds);
+            const diff = Math.abs(Math.round(obs.t) - latestTimestamp);
             if (diff < closestDiff) {
               closestDiff = diff;
               closestIdx = idx;
@@ -1104,7 +1114,7 @@ async function synthesizeForAlert(
           });
           if (closestDiff <= 2) { // Within 2 seconds tolerance
             offendingFrameIndex = closestIdx;
-            console.log(`[ALERT-SYNTHESIS] Found timestamp reference: ${seconds}s -> frame ${closestIdx + 1} (index ${closestIdx})`);
+            console.log(`[ALERT-SYNTHESIS] Found timestamp reference: ${latestTimestamp}s -> frame ${closestIdx + 1} (index ${closestIdx})`);
           }
         }
       }
