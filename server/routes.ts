@@ -1087,11 +1087,11 @@ async function synthesizeForAlert(
         }
       }
       
-      // Look for timestamp references like "[8s]" or "at 8s" or "8 seconds"
+      // Look for timestamp references like "[8s]" or "at 8s" or "t=8s"
       if (offendingFrameIndex === undefined) {
-        const timeMatch = allResponseText.match(/\[(\d+)\s*s\]|at\s+(\d+)\s*s(?:econds?)?/i);
+        const timeMatch = allResponseText.match(/\[(\d+)\s*s\]|at\s+(\d+)\s*s(?:econds?)?|t\s*=\s*(\d+)\s*s/i);
         if (timeMatch) {
-          const seconds = parseInt(timeMatch[1] || timeMatch[2], 10);
+          const seconds = parseInt(timeMatch[1] || timeMatch[2] || timeMatch[3], 10);
           // Find the observation closest to this timestamp
           let closestIdx = 0;
           let closestDiff = Infinity;
