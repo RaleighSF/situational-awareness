@@ -775,18 +775,56 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
         try {
           extracted = JSON.parse(jsonStr);
         } catch (parseErr) {
-          // Truncated JSON - try to extract at least the summary field
+          // Truncated JSON - extract fields using regex
+          console.log(`[REASON] JSON parse failed, attempting regex extraction from truncated response`);
+          
           const summaryMatch = jsonStr.match(/"summary"\s*:\s*"([^"]+)"/);
+          
+          // Extract array items - handles malformed JSON with missing commas
+          const extractArrayItems = (fieldName: string): string[] => {
+            // Match the field and capture content until the next field or end
+            const fieldRegex = new RegExp(`"${fieldName}"\\s*:\\s*\\[([\\s\\S]*?)(?:\\]\\s*,|\\]\\s*\\}|$)`);
+            const fieldMatch = jsonStr.match(fieldRegex);
+            if (!fieldMatch) return [];
+            
+            // Extract quoted strings from the array content
+            const content = fieldMatch[1];
+            const items: string[] = [];
+            const stringRegex = /"([^"]+)"/g;
+            let match;
+            while ((match = stringRegex.exec(content)) !== null) {
+              const item = match[1].trim();
+              if (item && item !== "None" && item !== "None observed") {
+                items.push(item);
+              }
+            }
+            return items;
+          };
+          
+          // Extract confidence
+          const confidenceMatch = jsonStr.match(/"confidence"\s*:\s*([\d.]+)/);
+          const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]) : 0.5;
+          
           if (summaryMatch) {
-            console.log(`[REASON] Extracted summary from truncated JSON: ${summaryMatch[1].substring(0, 50)}...`);
+            const escalation = extractArrayItems('escalation');
+            const anomalies = extractArrayItems('anomalies');
+            const changes = extractArrayItems('changes');
+            const persistent = extractArrayItems('persistent');
+            
+            console.log(`[REASON] Extracted from truncated JSON:`);
+            console.log(`  - summary: ${summaryMatch[1].substring(0, 50)}...`);
+            console.log(`  - escalation: ${escalation.length} items`);
+            console.log(`  - anomalies: ${anomalies.length} items`);
+            console.log(`  - confidence: ${confidence}`);
+            
             extracted = { 
               summary: summaryMatch[1],
               timeline: [],
-              changes: [],
-              persistent: [],
-              anomalies: [],
-              escalation: [],
-              confidence: 0.5
+              changes,
+              persistent,
+              anomalies,
+              escalation,
+              confidence
             };
           }
         }
