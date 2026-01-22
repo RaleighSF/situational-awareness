@@ -1113,8 +1113,11 @@ async function synthesizeForAlert(
             }
           });
           if (closestDiff <= 2) { // Within 2 seconds tolerance
-            offendingFrameIndex = closestIdx;
-            console.log(`[ALERT-SYNTHESIS] Found timestamp reference: ${latestTimestamp}s -> frame ${closestIdx + 1} (index ${closestIdx})`);
+            // Use the NEXT frame after the violation (shows result, not start)
+            // But don't exceed the last frame
+            const nextFrameIdx = Math.min(closestIdx + 1, observations.length - 1);
+            offendingFrameIndex = nextFrameIdx;
+            console.log(`[ALERT-SYNTHESIS] Found timestamp reference: ${latestTimestamp}s -> using next frame ${nextFrameIdx + 1} (index ${nextFrameIdx})`);
           }
         }
       }
