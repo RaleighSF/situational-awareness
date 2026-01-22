@@ -979,12 +979,14 @@ interface AlertSynthesisResult {
   confidence: string;
   analysis: string;
   escalation?: string;
+  offendingFrameIndex?: number;
 }
 
 async function synthesizeForAlert(
   observations: FrameObservation[], 
   rulePrompt: string,
-  sceneContext?: string
+  sceneContext?: string,
+  ruleText?: string // The actual detection rule text (e.g., "missing safety goggles")
 ): Promise<AlertSynthesisResult> {
   const observationsPayload = observations.map(o => ({
     t: Math.round(o.t),
@@ -1068,11 +1070,111 @@ async function synthesizeForAlert(
       analysisText = summaryText || "No concerning patterns detected. Risk level is low.";
     }
 
+    // Find the offending frame by matching rule keywords against observations
+    // Extract keywords from the actual detection rule for targeted matching
+    let offendingFrameIndex: number | undefined;
+    if (detected) {
+      // First, try to find explicit frame references in the summary/escalation/anomalies
+      const allResponseText = `${summaryText} ${escalationText} ${anomaliesText}`;
+      
+      // Look for "Frame N" or "frame N" patterns
+      const frameMatch = allResponseText.match(/[Ff]rame\s*(\d+)/);
+      if (frameMatch) {
+        const frameNum = parseInt(frameMatch[1], 10);
+        if (frameNum >= 1 && frameNum <= observations.length) {
+          offendingFrameIndex = frameNum - 1; // Convert to 0-indexed
+          console.log(`[ALERT-SYNTHESIS] Found explicit frame reference: Frame ${frameNum} (index ${offendingFrameIndex})`);
+        }
+      }
+      
+      // Look for timestamp references like "[8s]" or "at 8s" or "8 seconds"
+      if (offendingFrameIndex === undefined) {
+        const timeMatch = allResponseText.match(/\[(\d+)\s*s\]|at\s+(\d+)\s*s(?:econds?)?/i);
+        if (timeMatch) {
+          const seconds = parseInt(timeMatch[1] || timeMatch[2], 10);
+          // Find the observation closest to this timestamp
+          let closestIdx = 0;
+          let closestDiff = Infinity;
+          observations.forEach((obs, idx) => {
+            const diff = Math.abs(Math.round(obs.t) - seconds);
+            if (diff < closestDiff) {
+              closestDiff = diff;
+              closestIdx = idx;
+            }
+          });
+          if (closestDiff <= 2) { // Within 2 seconds tolerance
+            offendingFrameIndex = closestIdx;
+            console.log(`[ALERT-SYNTHESIS] Found timestamp reference: ${seconds}s -> frame ${closestIdx + 1} (index ${closestIdx})`);
+          }
+        }
+      }
+      
+      // If no explicit reference, use keyword scoring based on the rule text
+      if (offendingFrameIndex === undefined && ruleText) {
+        // Extract significant words from the rule (3+ chars, exclude basic stop words)
+        // Note: Keep "not", "no", "without" as they're important for absence rules
+        const stopWords = ['the', 'and', 'for', 'are', 'but', 'you', 'all', 'can', 'has', 'her', 'was', 'one', 'our', 'out', 'day', 'had', 'get', 'him', 'his', 'how', 'its', 'may', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'own', 'say', 'she', 'too', 'use', 'any'];
+        const ruleWords = ruleText.toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length >= 3 && !stopWords.includes(w));
+        
+        // Violation indicators that suggest a problem is visible
+        const violationIndicators = ['missing', 'without', 'no ', 'not ', 'absent', 'lack', 'unsafe', 'violation', 'suspicious', 'concerning', 'detected', 'visible', 'observed'];
+        
+        // Score each observation
+        let bestScore = 0;
+        let bestIdx = observations.length - 1; // Default to last frame
+        
+        observations.forEach((obs, idx) => {
+          const obsText = obs.text.toLowerCase();
+          let score = 0;
+          
+          // Check for rule keywords in observation (high weight)
+          for (const keyword of ruleWords) {
+            if (obsText.includes(keyword)) {
+              score += 3;
+            }
+          }
+          
+          // Check for violation indicators (medium weight)
+          for (const indicator of violationIndicators) {
+            if (obsText.includes(indicator)) {
+              score += 2;
+            }
+          }
+          
+          // Check if observation mentions things from the violation summary
+          const violationWords = `${escalationText} ${anomaliesText}`.toLowerCase().split(/\s+/).filter(w => w.length >= 4);
+          for (const word of violationWords) {
+            if (obsText.includes(word)) {
+              score += 1;
+            }
+          }
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestIdx = idx;
+          }
+        });
+        
+        offendingFrameIndex = bestIdx;
+        console.log(`[ALERT-SYNTHESIS] Keyword scoring: [${ruleWords.slice(0, 5).join(', ')}], selected frame ${bestIdx + 1}/${observations.length} (score: ${bestScore})`);
+      }
+      
+      // Final fallback: use last frame (often shows culmination of the issue)
+      if (offendingFrameIndex === undefined) {
+        offendingFrameIndex = observations.length - 1;
+        console.log(`[ALERT-SYNTHESIS] Using last frame as fallback: ${offendingFrameIndex + 1}/${observations.length}`);
+      }
+    }
+
     return {
       detected,
       confidence,
       analysis: analysisText.substring(0, 500),
       escalation: escalationText || undefined,
+      offendingFrameIndex,
     };
   } catch (error) {
     console.error("[ALERT-SYNTHESIS] Error:", error);
@@ -1523,8 +1625,8 @@ Scene Context: ${sceneContext || "Not specified"}
 You are evaluating whether the following observations from a ${durationSeconds}-second video sequence indicate the alert rule should be triggered.
 Consider the PROGRESSION of activity across frames - is the behavior escalating, persisting, or developing toward a concerning pattern?
 
-Observations:
-${observations.map(o => `[${o.t}s] ${o.text}`).join('\n')}
+Observations (frame numbers 1-${frames.length}):
+${observations.map((o, idx) => `[Frame ${idx + 1} @ ${o.t}s] ${o.text}`).join('\n')}
 
 Based on these observations, should this alert rule be triggered?
 Respond with a JSON object containing:
@@ -1532,14 +1634,20 @@ Respond with a JSON object containing:
 - confidence: "LOW" | "MEDIUM" | "HIGH"
 - analysis: A brief explanation of why the alert was or wasn't triggered
 - escalation: If detected, describe the escalating pattern observed
+- offendingFrame: If detected, which frame number (1-${frames.length}) most clearly shows the violation? Pick the single best evidence frame.
 `;
 
-      const synthesisResult = await synthesizeForAlert(observations, ruleContextPrompt, sceneContext);
+      const synthesisResult = await synthesizeForAlert(observations, ruleContextPrompt, sceneContext, prompt.prompt);
       
       console.log(`[ANALYZE-BATCH] Synthesis complete: detected=${synthesisResult.detected}, confidence=${synthesisResult.confidence}`);
 
       let alertCreated = false;
       if (synthesisResult.detected) {
+        // Use the offending frame identified by synthesis, or fall back to last frame
+        const offendingIdx = synthesisResult.offendingFrameIndex ?? (frames.length - 1);
+        const offendingFrame = frames[Math.min(offendingIdx, frames.length - 1)];
+        console.log(`[ANALYZE-BATCH] Using frame ${offendingIdx + 1}/${frames.length} for alert evidence`);
+        
         const batchMeta: BatchMeta = {
           mode: "batch",
           frameCount: frames.length,
@@ -1551,7 +1659,7 @@ Respond with a JSON object containing:
 
         await storage.createAlert({
           promptId: promptId,
-          frameData: frames[0],
+          frameData: offendingFrame,
           analysisResult: synthesisResult.analysis,
           confidence: synthesisResult.confidence,
           isRead: false,
