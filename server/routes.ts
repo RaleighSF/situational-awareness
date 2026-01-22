@@ -701,9 +701,11 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     observations: { t: number; text: string }[];
     total_seconds: number;
     context?: string;
+    max_new_tokens?: number;
   } = {
     observations: truncatedObservations,
     total_seconds: totalSeconds,
+    max_new_tokens: 1024,  // Ensure complete JSON response without excessive generation
   };
 
   if (sceneContext) {
