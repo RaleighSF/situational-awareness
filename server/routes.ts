@@ -780,7 +780,7 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
           
           const summaryMatch = jsonStr.match(/"summary"\s*:\s*"([^"]+)"/);
           
-          // Extract array items - handles malformed JSON with missing commas
+          // Extract array items - handles malformed JSON with missing commas and truncated strings
           const extractArrayItems = (fieldName: string): string[] => {
             // Match the field and capture content until the next field or end
             const fieldRegex = new RegExp(`"${fieldName}"\\s*:\\s*\\[([\\s\\S]*?)(?:\\]\\s*,|\\]\\s*\\}|$)`);
@@ -790,6 +790,8 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
             // Extract quoted strings from the array content
             const content = fieldMatch[1];
             const items: string[] = [];
+            
+            // First: extract complete quoted strings
             const stringRegex = /"([^"]+)"/g;
             let match;
             while ((match = stringRegex.exec(content)) !== null) {
@@ -798,6 +800,19 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
                 items.push(item);
               }
             }
+            
+            // Second: if no items found, try to extract a truncated string at the end
+            // This handles cases like: "escalation": ["Dispatch Robodog (truncated without closing quote)
+            if (items.length === 0) {
+              const truncatedMatch = content.match(/"([^"]{10,})$/);
+              if (truncatedMatch) {
+                const item = truncatedMatch[1].trim();
+                if (item && item !== "None" && item !== "None observed") {
+                  items.push(item + "...");  // Add ellipsis to indicate truncation
+                }
+              }
+            }
+            
             return items;
           };
           
