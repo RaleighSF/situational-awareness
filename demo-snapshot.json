@@ -52,6 +52,15 @@
       "settings": {
         "sceneContext": ""
       }
+    },
+    {
+      "id": "950d28bb-2359-4c73-b6fc-9c6bbc33b4ba",
+      "name": "Plant Fire",
+      "url": "/attached_assets/plant-fire.mp4",
+      "isActive": true,
+      "settings": {
+        "sceneContext": "Industrial safety monitoring - detect fire hazards, worker safety risks, and recommend immediate actions. Also we have a robodog with fire surpression capabilities."
+      }
     }
   ],
   "prompts": [
