@@ -802,6 +802,13 @@ async function synthesizeObservations(observations: FrameObservation[], sceneCon
     
     // The API returns synthesis data at root level - use it directly
     if (parsedData.summary && typeof parsedData.summary === 'string') {
+      // DEBUG: Log raw escalation/anomalies/confidence from API
+      console.log(`[REASON-DEBUG] Raw API response fields:`);
+      console.log(`  - escalation (type: ${typeof parsedData.escalation}, isArray: ${Array.isArray(parsedData.escalation)}):`, JSON.stringify(parsedData.escalation));
+      console.log(`  - anomalies (type: ${typeof parsedData.anomalies}, isArray: ${Array.isArray(parsedData.anomalies)}):`, JSON.stringify(parsedData.anomalies));
+      console.log(`  - confidence (type: ${typeof parsedData.confidence}):`, parsedData.confidence);
+      console.log(`  - summary:`, parsedData.summary?.substring(0, 100));
+      
       // Parse timeline events (server format: {t, event})
       const timeline: { t: number; event: string }[] = [];
       if (Array.isArray(parsedData.timeline)) {
