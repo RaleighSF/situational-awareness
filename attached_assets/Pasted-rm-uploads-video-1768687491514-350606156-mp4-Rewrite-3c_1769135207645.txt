@@ -1,0 +1,30 @@
+rm 'uploads/video-1768687491514-350606156.mp4'
+Rewrite 3c3576b6d079e12c8b1429b6250f8e5081e4f3a9 (530/555) (16 seconds passed, remaining 0 predicted)    rm 'uploads/video-1768686842736-237902035.mp4'
+rm 'uploads/video-1768687491514-350606156.mp4'
+Rewrite 3331ba8d70ef84dd93cc5eee3cdbe7e171923276 (530/555) (16 seconds passed, remaining 0 predicted)    
+Ref 'refs/heads/main' was rewritten
+Ref 'refs/heads/replit-agent' was rewritten
+Ref 'refs/remotes/gitsafe-backup/main' was rewritten
+Ref 'refs/replit/agent-ledger' was rewritten
+[1]+  Terminated              git filter-branch --force --index-filter 'git rm --cached --ignore-unmatch uploads/video-1768686842736-237902035.mp4 uploads/video-1768687491514-350606156.mp4 uploads/video-1768677327870-525964958.mp4' --prune-empty --tag-name-filter cat -- --all
+Enumerating objects: 1722, done.
+Counting objects: 100% (1722/1722), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (1694/1694), done.
+Writing objects: 100% (1722/1722), done.
+Total 1722 (delta 1349), reused 270 (delta 0), pack-reused 0 (from 0)
+Enumerating objects: 1446, done.
+Counting objects: 100% (1446/1446), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (466/466), done.
+Writing objects: 100% (1446/1446), 351.73 MiB | 5.68 MiB/s, done.
+Total 1446 (delta 1064), reused 1231 (delta 952), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (1064/1064), done.
+remote: warning: File attached_assets/newspaper.mp4 is 65.94 MB; this is larger than GitHub's recommended maximum file size of 50.00 MB
+remote: error: Trace: 411d74c3dab8834e5251a55cf6d0420f9900cd40f1af998563c8c73de00ac2a5
+remote: error: See https://gh.io/lfs for more information.
+remote: error: File attached_assets/parking-lot.mp4 is 108.49 MB; this exceeds GitHub's file size limit of 100.00 MB
+remote: error: GH001: Large files detected. You may want to try Git Large File Storage - https://git-lfs.github.com.
+To https://github.com/RaleighSF/situational-awareness.git
+ ! [remote rejected] main -> main (pre-receive hook declined)
+error: failed to push some refs to 'https://github.com/RaleighSF/situational-awareness.git'
