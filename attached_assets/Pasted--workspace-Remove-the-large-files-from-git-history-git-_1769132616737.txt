@@ -1,0 +1,42 @@
+~/workspace$ # Remove the large files from git history
+git filter-branch --force --index-filter \
+  'git rm --cached --ignore-unmatch uploads/video-1768686842736-237902035.mp4 uploads/video-1768687491514-350606156.mp4 uploads/video-1768677327870-525964958.mp4' \
+  --prune-empty --tag-name-filter cat -- --all
+
+# Clean up refs
+rm -rf .git/refs/original/
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+
+# Force push to GitHub
+git push https://RaleighSF:$GITHUB_PAT@github.com/RaleighSF/situational-awareness.git main --force
+WARNING: git-filter-branch has a glut of gotchas generating mangled history
+     rewrites.  Hit Ctrl-C before proceeding to abort, then use an
+     alternative filtering tool such as 'git filter-repo'
+     (https://github.com/newren/git-filter-repo/) instead.  See the
+     filter-branch manual page for more details; to squelch this warning,
+     set FILTER_BRANCH_SQUELCH_WARNING=1.
+^Z
+[1]+  Stopped                 git filter-branch --force --index-filter 'git rm --cached --ignore-unmatch uploads/video-1768686842736-237902035.mp4 uploads/video-1768687491514-350606156.mp4 uploads/video-1768677327870-525964958.mp4' --prune-empty --tag-name-filter cat -- --all
+Enumerating objects: 1780, done.
+Counting objects: 100% (1780/1780), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (1752/1752), done.
+Writing objects: 100% (1780/1780), done.
+Total 1780 (delta 1407), reused 0 (delta 0), pack-reused 0 (from 0)
+Enumerating objects: 1504, done.
+Counting objects: 100% (1504/1504), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (524/524), done.
+Writing objects: 100% (1504/1504), 456.59 MiB | 5.68 MiB/s, done.
+Total 1504 (delta 1122), reused 1229 (delta 952), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (1122/1122), done.
+remote: warning: File uploads/video-1768687491514-350606156.mp4 is 65.94 MB; this is larger than GitHub's recommended maximum file size of 50.00 MB
+remote: warning: File uploads/video-1768677327870-525964958.mp4 is 76.96 MB; this is larger than GitHub's recommended maximum file size of 50.00 MB
+remote: error: Trace: 80f853ee3050389fb477067a7868599860e8bc7d5cf52902f765d2b25dcea70d
+remote: error: See https://gh.io/lfs for more information.
+remote: error: File uploads/video-1768686842736-237902035.mp4 is 108.49 MB; this exceeds GitHub's file size limit of 100.00 MB
+remote: error: GH001: Large files detected. You may want to try Git Large File Storage - https://git-lfs.github.com.
+To https://github.com/RaleighSF/situational-awareness.git
+ ! [remote rejected] main -> main (pre-receive hook declined)
+error: failed to push some refs to 'https://github.com/RaleighSF/situational-awareness.git
