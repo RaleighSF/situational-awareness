@@ -71,16 +71,15 @@ class CaptionIndexer:
             self.running = False
             return
 
-        logger.info("Indexing %d video sources at 1 frame/%ds per source.", len(sources), self._rate_seconds)
+        logger.info("Indexing %d video sources in parallel, cycle every %ds.", len(sources), self._rate_seconds)
 
         while not self._stop_event.is_set():
-            for source in sources:
-                if self._stop_event.is_set():
-                    break
-                try:
-                    await self._index_source(source, model)
-                except Exception as e:
-                    logger.error("Error indexing source %s: %s", source.get("name", "?"), e)
+            # Index all sources concurrently each cycle
+            tasks = [self._index_source(source, model) for source in sources]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for source, result in zip(sources, results):
+                if isinstance(result, Exception):
+                    logger.error("Error indexing source %s: %s", source.get("name", "?"), result)
 
             # Wait for the next cycle
             try:
@@ -114,10 +113,27 @@ class CaptionIndexer:
         if not video_url:
             return
 
+        # Known durations for demo MP4s — prevents re-indexing after loop point
+        _VIDEO_DURATIONS: dict[str, float] = {
+            "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4": 30,
+            "/attached_assets/engine-assembly.mp4": 35,
+            "/attached_assets/ring-camera.mp4": 31,
+            "/attached_assets/plant-fire.mp4": 19,
+            "/attached_assets/parking-lot.mp4": 37,
+            "/attached_assets/product-picking.mp4": 19,
+            "/attached_assets/doc-video.mp4": 61,
+        }
+        video_duration = _VIDEO_DURATIONS.get(video_url)
+
         # Get the indexer state for this camera
         state = await get_indexer_state(camera_id)
         last_video_time = state["last_video_time"] if state else 0
         total_captions = state["total_captions"] if state else 0
+
+        # For demo videos (finite MP4s), skip if fully indexed
+        if video_duration and last_video_time >= video_duration:
+            logger.debug("Skipping %s — fully indexed (t=%.0fs >= duration=%.0fs)", camera_name, last_video_time, video_duration)
+            return
 
         # For demo videos (MP4s), we increment the video time offset
         # In production with live RTSP, this would be wall-clock time
