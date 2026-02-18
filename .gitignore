@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build output
+dist/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads & generated data
+uploads/
+*.tar.gz
+
+# Database
+*.db
+*.sqlite
+chroma_data/
+
+# Logs
+*.log
+
+# Vite
+vite.config.ts.*
+server/public
+
+# Replit
+.replit
+.local/
+*.bin
+Cosmos-Watcher/.local/
+Cosmos-Watcher/.replit
+
+# Large media assets (served at runtime, not needed in repo)
+**/attached_assets/*.mp4
+**/attached_assets/*.mov
+**/attached_assets/*.png
+**/attached_assets/Pasted-*
+**/attached_assets/image_*
+**/attached_assets/generated_images/
+**/attached_assets/stock_images/
+
+# Submodule artifacts
+.gitmodules

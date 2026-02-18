@@ -1,0 +1,21 @@
+# Add this ingress rule to /etc/cloudflared/config.yml
+# Place it BEFORE the catch-all 404 rule at the bottom.
+#
+# Current config at /etc/cloudflared/config.yml:
+#   tunnel: cosmos
+#   credentials-file: /home/ubuntu/.cloudflared/33489189-d334-4039-a529-e9dc18625984.json
+#   ingress:
+#     - hostname: cosmos.agentdemos.com
+#       service: http://localhost:8000
+#     - hostname: vss-api.agentdemos.com     <-- ADD THIS
+#       service: http://localhost:8200         <-- ADD THIS
+#     - service: http_status:404
+#
+# After editing, restart:
+#   sudo systemctl restart cloudflared
+#
+# Also add a CNAME record in Cloudflare DNS dashboard:
+#   vss-api.agentdemos.com -> <tunnel-id>.cfargotunnel.com
+
+- hostname: vss-api.agentdemos.com
+  service: http://localhost:8200

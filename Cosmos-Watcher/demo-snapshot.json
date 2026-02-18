@@ -1,0 +1,143 @@
+{
+  "exportedAt": "2026-02-03T19:17:53.657Z",
+  "videoSources": [
+    {
+      "id": "8130b303-7bcf-4e74-b140-2de05c66e590",
+      "name": "Loading Dock",
+      "url": "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4",
+      "isActive": true,
+      "settings": {
+        "sceneContext": "This is our loading dock and I'm primarily concerned with worker productivity vs. just sitting around and socializing."
+      }
+    },
+    {
+      "id": "4b65a155-2fd3-4cc7-a0fe-d320d4004488",
+      "name": "Engine Assembly",
+      "url": "/attached_assets/engine-assembly.mp4",
+      "isActive": true,
+      "settings": {
+        "sceneContext": "Motorcycle Engine assembly. The worker must never strike the engine with their hand to seat parts together."
+      }
+    },
+    {
+      "id": "5377c9fa-7121-4653-b596-e2c3185ad0de",
+      "name": "Ring Camera",
+      "url": "/attached_assets/ring-camera.mp4",
+      "isActive": true,
+      "settings": null
+    },
+    {
+      "id": "8d2a31a9-b953-4449-9c41-e5f7b5bc3985",
+      "name": "Plant Fire",
+      "url": "/attached_assets/plant-fire.mp4",
+      "isActive": true,
+      "settings": {
+        "sceneContext": "Industrial manufacturing plant with active machinery. Fire safety is critical priority.\nTOOLS: Robotic dog with fire suppression capabilities available for deployment"
+      }
+    },
+    {
+      "id": "f1f463bc-e3c6-48ed-be22-911d4e740280",
+      "name": "Parking Lot",
+      "url": "/attached_assets/parking-lot.mp4",
+      "isActive": true,
+      "settings": {
+        "sceneContext": "There are 2 established lanes in my lot.  Cars must enter through the gate arm and proceed straight ahead. Vehicles of any sort may not cross into the other lane. The yellow arrow marks the center between the two lanes. You will be presented with stills but assume cars are in constant motion coming through the gate arm."
+      }
+    },
+    {
+      "id": "a9a33bcf-ca17-4912-b4cc-8e73f0620cc2",
+      "name": "Product Picking",
+      "url": "/attached_assets/product-picking.mp4",
+      "isActive": true,
+      "settings": {
+        "sceneContext": ""
+      }
+    },
+    {
+      "id": "e171fafd-545c-4b29-aced-337115aae165",
+      "name": "The Newspaper",
+      "url": "/attached_assets/newspaper.mp4",
+      "isActive": true,
+      "settings": {
+        "sceneContext": "We want to focus on the health and safety of our patrols in this scene."
+      }
+    },
+    {
+      "id": "6bf76607-859e-4948-a18f-986ffef765e9",
+      "name": "DoC Video",
+      "url": "/attached_assets/doc-video.mp4",
+      "isActive": true,
+      "settings": null
+    }
+  ],
+  "prompts": [
+    {
+      "id": "1dfd436d-4afc-41f0-b67b-2a7847511f3e",
+      "videoSourceId": "e171fafd-545c-4b29-aced-337115aae165",
+      "name": "Safety Detector",
+      "prompt": "Detect any safety issues that might impact individuals or property. Detail any activities and request action that could be taken to ensure safety.",
+      "boundingBox": null,
+      "frequencySeconds": 10,
+      "isActive": true
+    },
+    {
+      "id": "934a5ee2-52ab-4dd8-b127-8a184afd00b0",
+      "videoSourceId": "8130b303-7bcf-4e74-b140-2de05c66e590",
+      "name": "Red Packages",
+      "prompt": "Detect the presence of reddish tone parcels in the scene.",
+      "boundingBox": {
+        "x": 13.327383608508105,
+        "y": 35.056570273690575,
+        "width": 24.20688043178003,
+        "height": 24.17694501633833
+      },
+      "frequencySeconds": 10,
+      "isActive": true
+    },
+    {
+      "id": "1e5fc013-5ee7-4a5e-9eec-cc7cb1e21b91",
+      "videoSourceId": "4b65a155-2fd3-4cc7-a0fe-d320d4004488",
+      "name": "SOP Monitor",
+      "prompt": "Motor assembly comprises of many steps, but after the gasket is placed, the motor must be sprayed off with an air gun before the top is placed. Alert if this doesn't happen.",
+      "boundingBox": null,
+      "frequencySeconds": 60,
+      "isActive": true
+    },
+    {
+      "id": "e2910136-260f-453a-9ec4-3f054d8861f5",
+      "videoSourceId": "f1f463bc-e3c6-48ed-be22-911d4e740280",
+      "name": "Lane Keep ",
+      "prompt": "All vehicles must proceed straight passing right to left from the gate arm. Detect any vehicles who do not stay on this trajectory.",
+      "boundingBox": null,
+      "frequencySeconds": 10,
+      "isActive": true
+    },
+    {
+      "id": "db2e892f-33f4-4e2f-aaa8-d36766d783ec",
+      "videoSourceId": "5377c9fa-7121-4653-b596-e2c3185ad0de",
+      "name": "Backyard Monitor",
+      "prompt": "I want to detect people acting suspicious outside of our family home. ",
+      "boundingBox": null,
+      "frequencySeconds": 5,
+      "isActive": true
+    },
+    {
+      "id": "8491811c-e5e9-4715-96a3-44d28f8e9858",
+      "videoSourceId": "a9a33bcf-ca17-4912-b4cc-8e73f0620cc2",
+      "name": "Safety Gear Analyzer",
+      "prompt": "Detect workers with bare hands.",
+      "boundingBox": null,
+      "frequencySeconds": 10,
+      "isActive": true
+    },
+    {
+      "id": "c070e649-6e3e-432c-8f1c-0d56b258f3d8",
+      "videoSourceId": "8d2a31a9-b953-4449-9c41-e5f7b5bc3985",
+      "name": "Fire Hazard Monitor",
+      "prompt": "Detect fire, smoke, flames, or any fire hazards. Alert immediately if fire is detected and recommend appropriate response actions.",
+      "boundingBox": null,
+      "frequencySeconds": 10,
+      "isActive": true
+    }
+  ]
+}

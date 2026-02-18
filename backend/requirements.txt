@@ -1,0 +1,20 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+python-dotenv==1.0.1
+pydantic-settings==2.7.1
+
+# Vector DB
+chromadb==0.6.3
+
+# Embeddings (CPU only)
+sentence-transformers==3.4.1
+
+# Gemini LLM
+google-genai==1.5.0
+
+# Database
+aiosqlite==0.21.0
+
+# SSE streaming
+sse-starlette==2.2.1
