@@ -8,8 +8,8 @@ import httpx
 
 logger = logging.getLogger("vss-api.cosmos")
 
-# Timeout: Cosmos inference can take 1-3s per frame
-_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+# Timeout: Cosmos inference can take 30-90s per frame depending on load
+_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 
 
 async def infer(
