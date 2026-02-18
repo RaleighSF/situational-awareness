@@ -45,17 +45,17 @@ def _build_rerank_prompt(query: str, captions: list[dict]) -> str:
 QUERY: {query}
 
 SCORING GUIDE:
-- 9-10: Caption explicitly mentions the exact thing (e.g. "black shirt" or "black t-shirt").
-- 7-8: Caption mentions black clothing/attire that plausibly includes a shirt.
-- 4-6: Caption mentions dark-colored clothing but not specifically black, or black item that isn't a shirt.
-- 1-3: Caption mentions a person but no black clothing.
-- 0: No person or clothing visible, or completely unrelated.
+- 9-10: Caption explicitly and directly describes what the query is asking for.
+- 7-8: Caption mentions something closely related (e.g. similar category, close synonym).
+- 4-6: Caption is tangentially related but doesn't clearly match the query.
+- 1-3: Caption mentions the general context but lacks the specific detail.
+- 0: Caption is completely unrelated to the query.
 
 RULES:
-- "black attire", "black jacket", "black clothing" → score 7-8 (close match).
-- "dark attire" without specifying black → score 4-5.
-- "white shirt", "purple shirt", "beige uniform" → score 0-2.
-- Score based only on what is explicitly stated, not inferred.
+- Score based ONLY on what is explicitly stated in the caption, not inferred.
+- Exact matches score higher than approximate/similar matches.
+- If the query asks about a specific color, only score high if that exact color is mentioned.
+- If the query asks about a specific action, only score high if that action is described.
 
 {items_block}
 
