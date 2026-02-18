@@ -1,12 +1,13 @@
 """RAG search synthesis prompt — Gemini takes retrieved captions and synthesizes an answer."""
 
 
-def search_synthesis_prompt(user_query: str, captions: list[dict]) -> str:
+def search_synthesis_prompt(user_query: str, captions: list[dict], mode: str = "grid") -> str:
     """Build the RAG synthesis prompt.
 
     Args:
         user_query: The user's natural language search query.
         captions: List of dicts with keys: camera_name, video_time_seconds, caption, similarity.
+        mode: "grid" (searching across all cameras) or "single" (searching one camera).
     """
     # Format retrieved captions as context
     context_lines = []
@@ -19,6 +20,37 @@ def search_synthesis_prompt(user_query: str, captions: list[dict]) -> str:
 
     context = "\n\n".join(context_lines)
 
+    if mode == "single":
+        # Single camera view — focus on moments/timestamps within one feed
+        mode_instructions = """CONTEXT: The user is viewing a single camera feed and wants to find specific moments within it.
+
+INSTRUCTIONS:
+1. State how many distinct moments matched within this camera's footage.
+2. List the matching moments chronologically by timestamp.
+3. For each moment, describe what was observed and at what time.
+4. If the query asks about specific attributes (e.g., clothing color, action), only cite moments that explicitly show those attributes.
+5. Highlight any safety concerns or anomalies if relevant.
+
+FORMAT:
+- Start with a 1-2 sentence summary stating how many moments were found.
+- Follow with the moments listed by timestamp (e.g., "At 0:15 — ...").
+- Keep it concise. No disclaimers about being an AI."""
+    else:
+        # Grid view — focus on which cameras have matches, one best result per camera
+        mode_instructions = """CONTEXT: The user is viewing all cameras in a grid and wants to know which cameras have matching footage.
+
+INSTRUCTIONS:
+1. State how many distinct cameras have matching footage.
+2. For each matching camera, briefly describe the best matching moment found.
+3. Reference the camera name and timestamp for each match.
+4. If the query asks about specific attributes (e.g., clothing color, action), only cite cameras where the footage explicitly shows those attributes.
+5. Highlight any safety concerns or anomalies if relevant.
+
+FORMAT:
+- Start with a 1-2 sentence summary stating how many cameras have matches.
+- Follow with one bullet per camera describing what was found and when.
+- Keep it concise. No disclaimers about being an AI."""
+
     return f"""You are an AI video analytics assistant. A user is searching through indexed video surveillance footage. These results have already been filtered for relevance.
 
 SEARCH QUERY: "{user_query}"
@@ -26,17 +58,7 @@ SEARCH QUERY: "{user_query}"
 MATCHING VIDEO CAPTIONS (pre-filtered and ranked by relevance):
 {context}
 
-INSTRUCTIONS:
-1. Synthesize a clear, direct answer to the user's query based ONLY on captions that genuinely match.
-2. Reference specific cameras and timestamps.
-3. If the query asks about specific attributes (e.g., clothing color, object type), only cite captions that explicitly mention those attributes.
-4. If the query asks for counts, provide the best estimate from available data.
-5. Highlight any safety concerns or anomalies if relevant.
-
-FORMAT:
-- Start with a 1-2 sentence direct answer stating how many relevant matches were found.
-- Follow with supporting details referencing specific clips.
-- Keep it concise. No disclaimers about being an AI."""
+{mode_instructions}"""
 
 
 def _format_time(seconds: float) -> str:

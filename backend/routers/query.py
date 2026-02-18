@@ -20,6 +20,7 @@ class QueryRequest(BaseModel):
     camera_id: str | None = Field(None, description="Optional camera filter")
     n_results: int = Field(10, ge=1, le=50, description="Number of results to retrieve")
     stream: bool = Field(False, description="Whether to stream the response via SSE")
+    mode: str = Field("grid", description="Search context: 'grid' (all cameras, one result per camera) or 'single' (one camera, all matching moments)")
 
 
 class QueryResult(BaseModel):
@@ -61,6 +62,7 @@ async def query_captions(req: QueryRequest):
         query=req.query,
         camera_id=req.camera_id,
         n_results=req.n_results,
+        mode=req.mode,
     )
 
     return QueryResponse(
@@ -90,6 +92,7 @@ async def query_captions_stream(req: QueryRequest):
             query=req.query,
             camera_id=req.camera_id,
             n_results=req.n_results,
+            mode=req.mode,
         ):
             yield {
                 "event": event["type"],

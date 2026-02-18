@@ -209,6 +209,7 @@ async def search(
     query: str,
     camera_id: str | None = None,
     n_results: int = 10,
+    mode: str = "grid",
 ) -> dict:
     """Search indexed captions semantically, rerank with Gemini, and return synthesized results."""
 
@@ -237,7 +238,7 @@ async def search(
 
     # 3. Synthesize answer with Gemini
     try:
-        prompt = search_synthesis_prompt(query, results)
+        prompt = search_synthesis_prompt(query, results, mode=mode)
         answer = await generate(
             api_key=settings.gemini_api_key,
             prompt=prompt,
@@ -260,6 +261,7 @@ async def search_streaming(
     query: str,
     camera_id: str | None = None,
     n_results: int = 10,
+    mode: str = "grid",
 ):
     """Search, rerank, and stream the synthesized answer via SSE."""
 
@@ -294,7 +296,7 @@ async def search_streaming(
     yield {"type": "results", "data": results}
 
     # 4. Stream synthesis from Gemini
-    prompt = search_synthesis_prompt(query, results)
+    prompt = search_synthesis_prompt(query, results, mode=mode)
     try:
         async for chunk in generate_streaming(
             api_key=settings.gemini_api_key,

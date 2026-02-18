@@ -14,6 +14,8 @@ import {
   X,
   Trash2,
   MessageSquare,
+  LayoutGrid,
+  Monitor,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -38,12 +40,16 @@ interface Message {
   content: string;
   results?: SearchResult[];
   timestamp: Date;
+  mode?: "grid" | "single"; // track which mode produced these results
 }
 
 interface QueryPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onResultClick: (cameraId: string, videoTimeSeconds: number) => void;
+  isGridView: boolean;
+  currentCameraId: string;
+  currentCameraName: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,11 +82,27 @@ function similarityColor(score: number): string {
   return "bg-red-600/80 text-red-50";
 }
 
+/**
+ * Deduplicate results by camera — keep only the highest-similarity result
+ * per camera_id, preserving original relevance order.
+ */
+function deduplicateByCamera(results: SearchResult[]): SearchResult[] {
+  const best = new Map<string, SearchResult>();
+  for (const r of results) {
+    const existing = best.get(r.camera_id);
+    if (!existing || r.similarity > existing.similarity) {
+      best.set(r.camera_id, r);
+    }
+  }
+  // Return in original relevance order, one per camera
+  return results.filter((r) => best.get(r.camera_id) === r);
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function EmptyState() {
+function EmptyState({ isGridView, cameraName }: { isGridView: boolean; cameraName: string }) {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-8 gap-4 select-none">
       <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
@@ -91,7 +113,9 @@ function EmptyState() {
           Ask questions about your video feeds
         </p>
         <p className="text-xs text-muted-foreground max-w-[260px]">
-          Use natural language to search across all cameras and timelines.
+          {isGridView
+            ? "Search across all cameras to find which feeds match your query."
+            : `Search within ${cameraName || "this camera"} to find specific moments.`}
         </p>
       </div>
     </div>
@@ -101,9 +125,11 @@ function EmptyState() {
 function ResultCard({
   result,
   onClick,
+  isGridResult,
 }: {
   result: SearchResult;
   onClick: () => void;
+  isGridResult: boolean;
 }) {
   const pct = Math.round(result.similarity * 100);
 
@@ -118,7 +144,11 @@ function ResultCard({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-          <Video className="h-3.5 w-3.5 shrink-0" />
+          {isGridResult ? (
+            <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+          ) : (
+            <Video className="h-3.5 w-3.5 shrink-0" />
+          )}
           <span className="truncate font-medium text-foreground">
             {result.camera_name}
           </span>
@@ -166,6 +196,9 @@ export function QueryPanel({
   isOpen,
   onClose,
   onResultClick,
+  isGridView,
+  currentCameraId,
+  currentCameraName,
 }: QueryPanelProps) {
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -209,6 +242,10 @@ export function QueryPanel({
       const trimmed = query.trim();
       if (!trimmed || isSearching) return;
 
+      // Snapshot the current mode at time of submission
+      const searchMode = isGridView ? "grid" : "single";
+      const cameraId = isGridView ? undefined : currentCameraId;
+
       // Add user message
       const userMessage: Message = {
         id: generateId(),
@@ -221,10 +258,21 @@ export function QueryPanel({
       setIsSearching(true);
 
       try {
+        const body: Record<string, unknown> = {
+          query: trimmed,
+          mode: searchMode,
+          // In grid view: request more results so we have broad camera coverage before dedup
+          // In single view: standard 10 results
+          n_results: searchMode === "grid" ? 20 : 10,
+        };
+        if (cameraId) {
+          body.camera_id = cameraId;
+        }
+
         const response = await fetch(`${VSS_API_URL}/api/query`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: trimmed, n_results: 10 }),
+          body: JSON.stringify(body),
         });
 
         if (!response.ok) {
@@ -245,7 +293,7 @@ export function QueryPanel({
         };
 
         // Normalise results from API
-        const searchResults: SearchResult[] = (data.results ?? []).map(
+        let searchResults: SearchResult[] = (data.results ?? []).map(
           (r: Record<string, unknown>) => ({
             chroma_id: r.chroma_id ?? r.id ?? generateId(),
             camera_id: r.camera_id ?? "",
@@ -258,12 +306,23 @@ export function QueryPanel({
           }),
         );
 
+        // Grid view: deduplicate to one result per camera (best match)
+        if (searchMode === "grid") {
+          searchResults = deduplicateByCamera(searchResults);
+        }
+
+        const countLabel =
+          searchMode === "grid"
+            ? `${searchResults.length} camera${searchResults.length !== 1 ? "s" : ""} matched`
+            : `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""} found`;
+
         const resultsMessage: Message = {
           id: generateId(),
           type: "results",
-          content: `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""} found`,
+          content: countLabel,
           results: searchResults,
           timestamp: new Date(),
+          mode: searchMode,
         };
 
         setResults(searchResults);
@@ -283,7 +342,7 @@ export function QueryPanel({
         setIsSearching(false);
       }
     },
-    [query, isSearching],
+    [query, isSearching, isGridView, currentCameraId],
   );
 
   // -------------------------------------------------------------------------
@@ -303,16 +362,31 @@ export function QueryPanel({
         >
           {/* ---- Header ---- */}
           <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border shrink-0">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold">Video Search</h2>
-              {totalResultCount > 0 && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                  {totalResultCount}
-                </Badge>
-              )}
+            <div className="flex items-center gap-2 min-w-0">
+              <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-semibold">Video Search</h2>
+                  {totalResultCount > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {totalResultCount}
+                    </Badge>
+                  )}
+                </div>
+                {/* Context indicator: shows current search scope */}
+                <div className="flex items-center gap-1 mt-0.5">
+                  {isGridView ? (
+                    <LayoutGrid className="h-3 w-3 text-emerald-500 shrink-0" />
+                  ) : (
+                    <Monitor className="h-3 w-3 text-muted-foreground shrink-0" />
+                  )}
+                  <p className="text-[10px] text-muted-foreground truncate leading-none">
+                    {isGridView ? "All cameras" : (currentCameraName || "Single camera")}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               {messages.length > 0 && (
                 <Button
                   size="icon"
@@ -339,7 +413,9 @@ export function QueryPanel({
           {/* ---- Chat area ---- */}
           <ScrollArea className="flex-1 min-h-0">
             <div ref={scrollRef} className="flex flex-col gap-3 p-4">
-              {messages.length === 0 && !isSearching && <EmptyState />}
+              {messages.length === 0 && !isSearching && (
+                <EmptyState isGridView={isGridView} cameraName={currentCameraName} />
+              )}
 
               {messages.map((msg) => {
                 if (msg.type === "user") {
@@ -366,12 +442,23 @@ export function QueryPanel({
 
                 // Results
                 if (msg.type === "results" && msg.results?.length) {
+                  const isGridResult = msg.mode === "grid";
                   return (
                     <div key={msg.id} className="space-y-2">
+                      {/* Result count label */}
+                      <p className="text-[10px] text-muted-foreground px-1">
+                        {msg.content}
+                        {isGridResult && (
+                          <span className="ml-1 text-muted-foreground/60">
+                            — click to open camera
+                          </span>
+                        )}
+                      </p>
                       {msg.results.map((result) => (
                         <ResultCard
                           key={result.chroma_id}
                           result={result}
+                          isGridResult={isGridResult}
                           onClick={() =>
                             onResultClick(
                               result.camera_id,
@@ -393,7 +480,7 @@ export function QueryPanel({
                   <div className="flex items-center gap-2 rounded-lg bg-muted/60 border border-border/50 px-3 py-2">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      Searching...
+                      Searching {isGridView ? "all cameras" : (currentCameraName || "camera")}...
                     </span>
                   </div>
                 </div>
@@ -410,7 +497,11 @@ export function QueryPanel({
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search video feeds..."
+              placeholder={
+                isGridView
+                  ? "Search all cameras..."
+                  : `Search ${currentCameraName || "this camera"}...`
+              }
               disabled={isSearching}
               className="flex-1 bg-muted/40 border-border/60 text-sm placeholder:text-muted-foreground/60"
             />

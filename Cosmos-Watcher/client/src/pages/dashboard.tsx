@@ -1381,6 +1381,9 @@ export default function Dashboard() {
           isOpen={isQueryPanelOpen}
           onClose={() => setIsQueryPanelOpen(false)}
           onResultClick={handleQueryResultClick}
+          isGridView={isGridView}
+          currentCameraId={currentVideoSourceId}
+          currentCameraName={currentSource?.name ?? ""}
         />
       </main>
 
