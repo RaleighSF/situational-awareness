@@ -280,7 +280,7 @@ export function EventTimeline({
                 </TooltipTrigger>
                 <TooltipContent
                   side="top"
-                  className="max-w-xs text-left space-y-1"
+                  className="max-w-sm text-left space-y-1"
                 >
                   <p className="text-xs font-medium">{event.camera_name}</p>
                   <p className="text-[11px] text-muted-foreground flex items-center gap-1">
@@ -288,7 +288,7 @@ export function EventTimeline({
                     {formatTime(event.video_time_seconds)}
                   </p>
                   <p className="text-xs leading-snug">
-                    {truncate(event.caption, 100)}
+                    {truncate(event.caption, 300)}
                   </p>
                   <Badge
                     variant={kind === "alert" ? "destructive" : "secondary"}
