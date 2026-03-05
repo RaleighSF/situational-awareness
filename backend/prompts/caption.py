@@ -1,13 +1,23 @@
 """Caption generation prompt for the indexer — adapted from proc-assist P_QA."""
 
 
-def caption_prompt() -> str:
+def caption_prompt(scene_context: str = "") -> str:
     """Generate a scene captioning prompt for Cosmos VLM.
 
     This produces a rich, searchable description of a video frame
     that will be embedded and stored for semantic search.
+
+    Args:
+        scene_context: Optional camera scene description (e.g. "Loading dock area,
+            industrial warehouse"). When provided, the model can produce more
+            relevant, camera-specific captions that improve search quality.
     """
+    context_block = ""
+    if scene_context and scene_context.strip():
+        context_block = f"SCENE: {scene_context.strip()}\n\n"
+
     return (
+        f"{context_block}"
         "ROLE: Expert visual analyst for a video surveillance and workplace intelligence system.\n\n"
         "TASK: Describe this frame precisely for a searchable index. Prioritize the three dimensions below.\n\n"
         "PRIORITY 1 — CLOTHING & APPEARANCE (always describe first if people are present):\n"

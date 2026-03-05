@@ -50,7 +50,8 @@ class CaptionIndexer:
         self._stop_event = asyncio.Event()
         self._rate_seconds = settings.caption_rate_seconds
         self._cosmos_endpoint = settings.cosmos_endpoint
-        self._prompt = caption_prompt()
+        # Per-camera prompts are built on-demand with scene context; cache to avoid rebuilding
+        self._prompt_cache: dict[str, str] = {}
         # Persistent HTTP client for frame capture requests (avoids per-call connection churn)
         self._http_client: httpx.AsyncClient | None = None
         # Semaphore to limit concurrent VLM inference calls
@@ -126,11 +127,19 @@ class CaptionIndexer:
             logger.error("Failed to fetch video sources: %s", e)
             return []
 
+    def _get_prompt(self, camera_id: str, scene_context: str = "") -> str:
+        """Get or build a cached caption prompt for a camera, incorporating scene context."""
+        cache_key = f"{camera_id}:{scene_context}"
+        if cache_key not in self._prompt_cache:
+            self._prompt_cache[cache_key] = caption_prompt(scene_context)
+        return self._prompt_cache[cache_key]
+
     async def _index_source(self, source: dict, model: SentenceTransformer):
         """Index a single frame from a video source."""
         camera_id = source.get("id", "")
         camera_name = source.get("name", "Unknown")
         video_url = source.get("url", "")
+        scene_context = source.get("sceneContext", "")
 
         if not video_url:
             return
@@ -168,12 +177,13 @@ class CaptionIndexer:
             return
 
         # Generate caption via Cosmos VLM (rate-limited by semaphore)
+        prompt = self._get_prompt(camera_id, scene_context)
         async with self._vlm_semaphore:
             try:
                 caption_text = await infer(
                     endpoint=self._cosmos_endpoint,
                     image_b64=frame_b64,
-                    prompt=self._prompt,
+                    prompt=prompt,
                     mode="qa",
                     max_new_tokens=512,
                 )
