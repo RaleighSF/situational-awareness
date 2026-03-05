@@ -812,7 +812,7 @@ export default function Dashboard() {
       // Calculate effective sampling duration (capped at MAX_DURATION_SECONDS, min 10s for schema)
       const MIN_DURATION_SECONDS = 10;
       const MIN_INTERVAL_SECONDS = 3; // Cosmos API requires intervalSeconds >= 3
-      const effectiveDuration = Math.max(MIN_DURATION_SECONDS, Math.min(videoDuration, MAX_DURATION_SECONDS));
+      const effectiveDuration = Math.max(MIN_DURATION_SECONDS, Math.min(videoDuration - 1, MAX_DURATION_SECONDS));
       
       // Calculate max frames allowed to maintain minimum interval
       // intervalSeconds = effectiveDuration / (frameCount - 1) >= MIN_INTERVAL_SECONDS
@@ -1091,12 +1091,24 @@ export default function Dashboard() {
                     className="text-primary rounded-r-none border-r-0"
                     data-testid="button-scene-agent"
                   >
-                    {isSceneAgentRunning ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Bot className="h-4 w-4 mr-2" />
-                    )}
-                    {isSceneAgentRunning ? "Monitoring..." : currentSceneAgentResult ? "View Report" : "Scene Agent"}
+                    <div className="relative">
+                      {isSceneAgentRunning ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Bot className="h-4 w-4 mr-2" />
+                      )}
+                      {!isSceneAgentRunning && currentSceneAgentResult && (
+                        <span className="absolute -top-1 -right-0.5 w-2 h-2 bg-[#76B900] rounded-full" />
+                      )}
+                    </div>
+                    {isSceneAgentRunning && sceneAgentPhase ? (
+                      <span className="flex items-center gap-1.5">
+                        <span>{sceneAgentPhase === "recording" ? "Recording" : "Analyzing"}</span>
+                        <span className="text-[10px] font-mono tabular-nums bg-[#76B900]/15 text-[#76B900] px-1.5 py-0.5 rounded-full border border-[#76B900]/30">
+                          {sceneAgentElapsed}s
+                        </span>
+                      </span>
+                    ) : currentSceneAgentResult ? "View Report" : "Scene Agent"}
                   </Button>
                   <Popover open={isSceneAgentSettingsOpen} onOpenChange={setIsSceneAgentSettingsOpen}>
                     <PopoverTrigger asChild>

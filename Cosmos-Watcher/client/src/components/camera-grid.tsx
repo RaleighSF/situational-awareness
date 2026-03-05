@@ -82,7 +82,7 @@ const CameraCell = memo(function CameraCell({
             {/* Camera name overlay */}
             <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent px-2.5 py-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-white truncate mr-2">
+                <span className="text-xs font-medium text-white truncate mr-2" title={source.name}>
                   {source.name}
                 </span>
                 {source.isActive !== false && (

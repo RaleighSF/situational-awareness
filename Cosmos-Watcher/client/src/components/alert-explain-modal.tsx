@@ -11,6 +11,11 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Brain,
   ShieldCheck,
   ShieldAlert,
@@ -21,6 +26,8 @@ import {
   Loader2,
   Eye,
   Lightbulb,
+  ChevronDown,
+  Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -57,6 +64,7 @@ interface ExplainResponse {
   verdict: string;
   confidence: string;
   sections: ExplainSections;
+  thinking?: string | null;
 }
 
 export interface AlertExplainModalProps {
@@ -166,6 +174,77 @@ function BulletList({ items }: { items: string[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+const LOADING_PHASES = [
+  { icon: Eye, text: "Capturing visual evidence...", delay: 0 },
+  { icon: Brain, text: "Reasoning through evidence...", delay: 2000 },
+  { icon: ShieldCheck, text: "Forming verdict...", delay: 6000 },
+] as const;
+
+function PhasedLoadingIndicator() {
+  const [phase, setPhase] = useState(0);
+
+  useEffect(() => {
+    const timers = LOADING_PHASES.slice(1).map((p, i) =>
+      setTimeout(() => setPhase(i + 1), p.delay),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  const { icon: PhaseIcon, text } = LOADING_PHASES[phase];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex flex-col items-center justify-center py-12 gap-3"
+      data-testid="explain-loading"
+    >
+      <div className="relative">
+        <Loader2 className="h-8 w-8 animate-spin text-[#76B900]" />
+        <PhaseIcon className="absolute -right-1 -bottom-1 h-4 w-4 text-[#76B900]" />
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.p
+          key={phase}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          className="text-sm text-muted-foreground"
+        >
+          {text}
+        </motion.p>
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function ThinkingAccordion({ thinking }: { thinking: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors group w-full">
+        <Sparkles className="h-3.5 w-3.5 text-[#76B900]" />
+        <span className="font-medium">AI Reasoning</span>
+        <ChevronDown
+          className={`h-3 w-3 ml-auto transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-2 rounded-md bg-muted/30 border border-border/40 px-4 py-3"
+        >
+          <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line">
+            {thinking}
+          </p>
+        </motion.div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -340,19 +419,9 @@ export function AlertExplainModal({
 
             <Separator />
 
-            {/* Loading state */}
+            {/* Loading state — phased */}
             {loading && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-col items-center justify-center py-12 gap-3"
-                data-testid="explain-loading"
-              >
-                <Loader2 className="h-8 w-8 animate-spin text-[#76B900]" />
-                <p className="text-sm text-muted-foreground">
-                  Analyzing alert with AI...
-                </p>
-              </motion.div>
+              <PhasedLoadingIndicator />
             )}
 
             {/* Error state */}
@@ -393,6 +462,11 @@ export function AlertExplainModal({
                   className="space-y-5"
                   data-testid="explain-result"
                 >
+                  {/* Chain-of-thought reasoning */}
+                  {result.thinking && (
+                    <ThinkingAccordion thinking={result.thinking} />
+                  )}
+
                   {/* Verdict + Confidence row */}
                   <div className="flex flex-wrap items-center gap-3">
                     {verdictConfig && (

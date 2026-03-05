@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Send, Loader2, Hash, Box } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Send, Loader2, Hash, Box, Sparkles, ChevronDown } from "lucide-react";
 
 interface CountItem {
   id: number;
@@ -22,6 +27,35 @@ interface CountData {
   count: number;
   items: CountItem[];
   notes?: string;
+}
+
+/** Extract <think>...</think> block from model response. */
+function extractThinking(text: string): { thinking: string | null; clean: string } {
+  const match = text.match(/<think>([\s\S]*?)<\/think>/);
+  if (match) {
+    const thinking = match[1].trim();
+    const clean = (text.slice(0, match.index) + text.slice(match.index! + match[0].length)).trim();
+    return { thinking, clean };
+  }
+  return { thinking: null, clean: text };
+}
+
+function ThinkingAccordion({ thinking }: { thinking: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
+        <Sparkles className="h-3.5 w-3.5 text-[#76b900]" />
+        <span className="font-medium">AI Reasoning</span>
+        <ChevronDown className={`h-3 w-3 ml-auto transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 rounded-md bg-muted/30 border border-border/40 px-3 py-2">
+          <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line">{thinking}</p>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 interface QuickAnalysisModalProps {
@@ -38,6 +72,7 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
   const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [mode, setMode] = useState<"qa" | "mark_count" | null>(null);
   const [countData, setCountData] = useState<CountData | null>(null);
+  const [thinking, setThinking] = useState<string | null>(null);
 
   const handleClose = () => {
     setPrompt("");
@@ -45,6 +80,7 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
     setModelUsed(null);
     setMode(null);
     setCountData(null);
+    setThinking(null);
     setIsAnalyzing(false);
     onClose();
   };
@@ -70,6 +106,7 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
     setModelUsed(null);
     setMode(null);
     setCountData(null);
+    setThinking(null);
 
     try {
       const res = await fetch("/api/analyze-adhoc", {
@@ -83,7 +120,10 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
       }
       
       const result = await res.json();
-      setResponse(result.analysis || "No response received from the model. Please try again.");
+      const rawAnalysis = result.analysis || "No response received from the model. Please try again.";
+      const { thinking: extractedThinking, clean } = extractThinking(rawAnalysis);
+      setResponse(clean);
+      setThinking(extractedThinking);
       setModelUsed(result.model || null);
       setMode(result.mode || "qa");
       if (result.countData) {
@@ -147,6 +187,21 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
             </Button>
           </div>
 
+          {/* Shimmer loading placeholder */}
+          {isAnalyzing && !response && (
+            <div className="p-4 rounded-lg bg-muted/50 border space-y-3">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-[#76b900]" />
+                <span className="text-xs text-muted-foreground">Analyzing frame...</span>
+              </div>
+              <div className="space-y-2">
+                <div className="h-3 bg-muted rounded animate-pulse w-full" />
+                <div className="h-3 bg-muted rounded animate-pulse w-4/5" />
+                <div className="h-3 bg-muted rounded animate-pulse w-3/5" />
+              </div>
+            </div>
+          )}
+
           {response && (
             <ScrollArea className="flex-1 max-h-[250px]">
               <div className="p-4 rounded-lg bg-muted/50 border">
@@ -172,6 +227,12 @@ export function QuickAnalysisModal({ isOpen, onClose, frameData, sceneContext }:
                   </div>
                 )}
                 
+                {thinking && (
+                  <div className="mb-3 pb-2 border-b">
+                    <ThinkingAccordion thinking={thinking} />
+                  </div>
+                )}
+
                 {mode === "mark_count" && countData ? (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">

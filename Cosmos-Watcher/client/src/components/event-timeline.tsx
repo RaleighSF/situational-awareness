@@ -146,6 +146,7 @@ export function EventTimeline({
 }: EventTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [flashDotId, setFlashDotId] = useState<number | null>(null);
 
   // ---- Data fetching -------------------------------------------------------
 
@@ -210,8 +211,10 @@ export function EventTimeline({
   // ---- Seek handler --------------------------------------------------------
 
   const handleDotClick = useCallback(
-    (videoTimeSeconds: number) => {
+    (eventId: number, videoTimeSeconds: number) => {
       onSeekTo(videoTimeSeconds);
+      setFlashDotId(eventId);
+      setTimeout(() => setFlashDotId(null), 600);
     },
     [onSeekTo]
   );
@@ -265,14 +268,15 @@ export function EventTimeline({
                   <button
                     type="button"
                     className={`absolute z-10 rounded-full ${style.size} ${style.color} ring-2 ${style.ring}
-                      cursor-pointer hover:scale-150 transition-transform duration-150
+                      cursor-pointer hover:scale-150 transition-all duration-150
                       focus-visible:outline-none focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-2 focus-visible:ring-ring
-                      ${isAlert ? "animate-pulse" : ""}`}
+                      ${isAlert ? "animate-pulse" : ""}
+                      ${flashDotId === event.id ? "scale-[2] ring-4 ring-[#76B900]/60 brightness-150" : ""}`}
                     style={{
                       left: `calc(${pct}%)`,
                       transform: "translateX(-50%)",
                     }}
-                    onClick={() => handleDotClick(event.video_time_seconds)}
+                    onClick={() => handleDotClick(event.id, event.video_time_seconds)}
                     aria-label={`${style.label} event at ${formatTime(
                       event.video_time_seconds
                     )}`}

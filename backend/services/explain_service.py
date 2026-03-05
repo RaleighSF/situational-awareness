@@ -82,13 +82,32 @@ async def explain_alert(
             "sections": {},
         }
 
-    # Parse structured response
-    parsed = _parse_explanation(explanation_text)
+    # Extract chain-of-thought reasoning if present
+    thinking, clean_text = _extract_thinking(explanation_text)
+
+    # Parse structured response from the clean text (without <think> block)
+    parsed = _parse_explanation(clean_text)
 
     return {
-        "explanation": explanation_text,
+        "explanation": clean_text,
+        "thinking": thinking,
         **parsed,
     }
+
+
+def _extract_thinking(text: str) -> tuple[str | None, str]:
+    """Extract <think>...</think> block from Cosmos response.
+
+    Returns (thinking_text, remaining_text).
+    """
+    import re
+
+    match = re.search(r'<think>([\s\S]*?)</think>', text)
+    if match:
+        thinking = match.group(1).strip()
+        remaining = text[:match.start()] + text[match.end():]
+        return thinking, remaining.strip()
+    return None, text
 
 
 def _parse_explanation(text: str) -> dict:

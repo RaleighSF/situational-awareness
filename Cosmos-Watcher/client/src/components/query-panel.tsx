@@ -138,51 +138,64 @@ function ResultCard({
       type="button"
       onClick={onClick}
       className={cn(
-        "w-full text-left rounded-lg border border-border/60 bg-card/60 p-3 space-y-2",
+        "w-full text-left rounded-lg border border-border/60 bg-card/60 p-3",
         "transition-colors hover:bg-accent/40 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-          {isGridResult ? (
-            <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-          ) : (
-            <Video className="h-3.5 w-3.5 shrink-0" />
-          )}
-          <span className="truncate font-medium text-foreground">
-            {result.camera_name}
-          </span>
-        </div>
-        <Badge
-          className={cn(
-            "text-[10px] px-1.5 py-0 border-none shrink-0",
-            similarityColor(result.similarity),
-          )}
-        >
-          {pct}%
-        </Badge>
-      </div>
-
-      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-        {result.caption}
-      </p>
-
-      <div className="flex items-center gap-3 text-[11px] text-muted-foreground/70">
-        <span className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          {formatVideoTime(result.video_time_seconds)}
-        </span>
-        {result.timestamp && (
-          <span className="flex items-center gap-1">
-            <MapPin className="h-3 w-3" />
-            {new Date(result.timestamp).toLocaleString(undefined, {
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
+      <div className="flex gap-3">
+        {/* Thumbnail */}
+        {result.frame_thumbnail_b64 && (
+          <img
+            src={result.frame_thumbnail_b64}
+            alt=""
+            className="w-16 h-12 rounded object-cover shrink-0 bg-black/40"
+          />
         )}
+
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+              {isGridResult ? (
+                <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+              ) : (
+                <Video className="h-3.5 w-3.5 shrink-0" />
+              )}
+              <span className="truncate font-medium text-foreground">
+                {result.camera_name}
+              </span>
+            </div>
+            <Badge
+              className={cn(
+                "text-[10px] px-1.5 py-0 border-none shrink-0",
+                similarityColor(result.similarity),
+              )}
+            >
+              {pct}%
+            </Badge>
+          </div>
+
+          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+            {result.caption}
+          </p>
+
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground/70">
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {formatVideoTime(result.video_time_seconds)}
+            </span>
+            {result.timestamp && (
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {new Date(result.timestamp).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
     </button>
   );
@@ -205,6 +218,8 @@ export function QueryPanel({
   const [isSearching, setIsSearching] = useState(false);   // reranking phase
   const [isSynthesizing, setIsSynthesizing] = useState(false); // answer-streaming phase
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -234,6 +249,7 @@ export function QueryPanel({
     setMessages([]);
     setResults([]);
     setQuery("");
+    setHasSearched(false);
     inputRef.current?.focus();
   }, []);
 
@@ -256,6 +272,7 @@ export function QueryPanel({
       setMessages((prev) => [...prev, userMessage]);
       setQuery("");
       setIsSearching(true);
+      setHasSearched(true);
 
       // IDs for the messages we'll inject progressively
       const assistantMsgId = generateId();
@@ -419,7 +436,12 @@ export function QueryPanel({
                   )}
                 </div>
                 {/* Context indicator: shows current search scope */}
-                <div className="flex items-center gap-1 mt-0.5">
+                <motion.div
+                  key={isGridView ? "grid" : "single"}
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-1 mt-0.5"
+                >
                   {isGridView ? (
                     <LayoutGrid className="h-3 w-3 text-emerald-500 shrink-0" />
                   ) : (
@@ -428,7 +450,7 @@ export function QueryPanel({
                   <p className="text-[10px] text-muted-foreground truncate leading-none">
                     {isGridView ? "All cameras" : (currentCameraName || "Single camera")}
                   </p>
-                </div>
+                </motion.div>
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -546,14 +568,17 @@ export function QueryPanel({
           </ScrollArea>
 
           {/* ---- Input bar ---- */}
+          <div className="shrink-0 border-t border-border px-3 pt-3 pb-2 bg-background">
           <form
             onSubmit={handleSubmit}
-            className="shrink-0 flex items-center gap-2 border-t border-border px-3 py-3 bg-background"
+            className="flex items-center gap-2"
           >
             <Input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setIsInputFocused(true)}
+              onBlur={() => setIsInputFocused(false)}
               placeholder={
                 isGridView
                   ? "Search all cameras..."
@@ -576,6 +601,12 @@ export function QueryPanel({
               )}
             </Button>
           </form>
+          {!hasSearched && isInputFocused && query.trim() && (
+            <p className="text-[10px] text-muted-foreground/50 mt-1 pl-1">
+              Press Enter to search
+            </p>
+          )}
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

@@ -37,6 +37,7 @@ class ExplainResponse(BaseModel):
     verdict: str
     confidence: str
     sections: ExplainSection
+    thinking: str | None = None
 
 
 @router.post("/explain", response_model=ExplainResponse)
@@ -64,4 +65,5 @@ async def explain_alert_endpoint(req: ExplainRequest):
         verdict=result["verdict"],
         confidence=result["confidence"],
         sections=ExplainSection(**result.get("sections", {})),
+        thinking=result.get("thinking"),
     )
