@@ -9,47 +9,27 @@ def search_synthesis_prompt(user_query: str, captions: list[dict], mode: str = "
         captions: List of dicts with keys: camera_name, video_time_seconds, caption, similarity.
         mode: "grid" (searching across all cameras) or "single" (searching one camera).
     """
-    # Format retrieved captions as context
     context_lines = []
     for i, cap in enumerate(captions, 1):
         time_str = _format_time(cap.get("video_time_seconds", 0))
         camera = cap.get("camera_name", "Unknown Camera")
-        text = cap.get("caption", "")
+        # Truncate caption — synthesis only needs enough to understand the scene
+        text = cap.get("caption", "")[:150]
         score = cap.get("similarity", 0)
-        context_lines.append(f"[{i}] Camera: {camera} | Time: {time_str} | Relevance: {score:.0%}\n{text}")
+        context_lines.append(f"[{i}] {camera} @ {time_str} ({score:.0%}): {text}")
 
-    context = "\n\n".join(context_lines)
+    context = "\n".join(context_lines)
 
     if mode == "single":
         # Single camera view — focus on moments/timestamps within one feed
-        mode_instructions = """CONTEXT: The user is viewing a single camera feed and wants to find specific moments within it.
+        mode_instructions = """CONTEXT: User is viewing a single camera feed, looking for specific moments.
 
-INSTRUCTIONS:
-1. State how many distinct moments matched within this camera's footage.
-2. List the matching moments chronologically by timestamp.
-3. For each moment, describe what was observed and at what time.
-4. If the query asks about specific attributes (e.g., clothing color, action), only cite moments that explicitly show those attributes.
-5. Highlight any safety concerns or anomalies if relevant.
-
-FORMAT:
-- Start with a 1-2 sentence summary stating how many moments were found.
-- Follow with the moments listed by timestamp (e.g., "At 0:15 — ...").
-- Keep it concise. No disclaimers about being an AI."""
+Instructions: List matching moments chronologically by timestamp. For each: time and brief description of what was observed. Keep it very concise — 2-3 sentences max total. No disclaimers."""
     else:
         # Grid view — focus on which cameras have matches, one best result per camera
-        mode_instructions = """CONTEXT: The user is viewing all cameras in a grid and wants to know which cameras have matching footage.
+        mode_instructions = """CONTEXT: User is viewing all cameras in a grid, looking for which cameras have matches.
 
-INSTRUCTIONS:
-1. State how many distinct cameras have matching footage.
-2. For each matching camera, briefly describe the best matching moment found.
-3. Reference the camera name and timestamp for each match.
-4. If the query asks about specific attributes (e.g., clothing color, action), only cite cameras where the footage explicitly shows those attributes.
-5. Highlight any safety concerns or anomalies if relevant.
-
-FORMAT:
-- Start with a 1-2 sentence summary stating how many cameras have matches.
-- Follow with one bullet per camera describing what was found and when.
-- Keep it concise. No disclaimers about being an AI."""
+Instructions: For each matching camera, state the camera name, timestamp, and one sentence describing what was found. Lead with a brief summary of how many cameras matched. Keep it very concise. No disclaimers."""
 
     return f"""You are an AI video analytics assistant. A user is searching through indexed video surveillance footage. These results have already been filtered for relevance.
 

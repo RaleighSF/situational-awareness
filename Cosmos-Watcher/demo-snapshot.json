@@ -54,15 +54,6 @@
       }
     },
     {
-      "id": "e171fafd-545c-4b29-aced-337115aae165",
-      "name": "The Newspaper",
-      "url": "/attached_assets/newspaper.mp4",
-      "isActive": true,
-      "settings": {
-        "sceneContext": "We want to focus on the health and safety of our patrols in this scene."
-      }
-    },
-    {
       "id": "6bf76607-859e-4948-a18f-986ffef765e9",
       "name": "DoC Video",
       "url": "/attached_assets/doc-video.mp4",
@@ -71,15 +62,6 @@
     }
   ],
   "prompts": [
-    {
-      "id": "1dfd436d-4afc-41f0-b67b-2a7847511f3e",
-      "videoSourceId": "e171fafd-545c-4b29-aced-337115aae165",
-      "name": "Safety Detector",
-      "prompt": "Detect any safety issues that might impact individuals or property. Detail any activities and request action that could be taken to ensure safety.",
-      "boundingBox": null,
-      "frequencySeconds": 10,
-      "isActive": true
-    },
     {
       "id": "934a5ee2-52ab-4dd8-b127-8a184afd00b0",
       "videoSourceId": "8130b303-7bcf-4e74-b140-2de05c66e590",

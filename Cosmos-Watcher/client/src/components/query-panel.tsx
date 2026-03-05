@@ -202,7 +202,8 @@ export function QueryPanel({
 }: QueryPanelProps) {
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);   // reranking phase
+  const [isSynthesizing, setIsSynthesizing] = useState(false); // answer-streaming phase
   const [results, setResults] = useState<SearchResult[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -240,13 +241,12 @@ export function QueryPanel({
     async (e?: React.FormEvent) => {
       e?.preventDefault();
       const trimmed = query.trim();
-      if (!trimmed || isSearching) return;
+      if (!trimmed || isSearching || isSynthesizing) return;
 
-      // Snapshot the current mode at time of submission
       const searchMode = isGridView ? "grid" : "single";
       const cameraId = isGridView ? undefined : currentCameraId;
 
-      // Add user message
+      // Add user message immediately
       const userMessage: Message = {
         id: generateId(),
         type: "user",
@@ -257,92 +257,137 @@ export function QueryPanel({
       setQuery("");
       setIsSearching(true);
 
+      // IDs for the messages we'll inject progressively
+      const assistantMsgId = generateId();
+      const resultsMsgId = generateId();
+
       try {
         const body: Record<string, unknown> = {
           query: trimmed,
           mode: searchMode,
-          // In grid view: request more results so we have broad camera coverage before dedup
-          // In single view: standard 10 results
           n_results: searchMode === "grid" ? 20 : 10,
         };
-        if (cameraId) {
-          body.camera_id = cameraId;
-        }
+        if (cameraId) body.camera_id = cameraId;
 
-        const response = await fetch(`${VSS_API_URL}/api/query`, {
+        const response = await fetch(`${VSS_API_URL}/api/query/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
 
-        if (!response.ok) {
+        if (!response.ok || !response.body) {
           throw new Error(`Search failed (${response.status})`);
         }
 
-        const data = await response.json();
+        // Parse SSE stream manually (EventSource only supports GET)
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let currentEventType = "";
+        let answerAccumulator = "";
+        let resultsShown = false;
 
-        // Add assistant answer
-        const assistantMessage: Message = {
-          id: generateId(),
-          type: "assistant",
-          content:
-            data.answer ||
-            data.synthesized_answer ||
-            "Here are the matching results.",
-          timestamp: new Date(),
-        };
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        // Normalise results from API
-        let searchResults: SearchResult[] = (data.results ?? []).map(
-          (r: Record<string, unknown>) => ({
-            chroma_id: r.chroma_id ?? r.id ?? generateId(),
-            camera_id: r.camera_id ?? "",
-            camera_name: r.camera_name ?? "Unknown Camera",
-            video_time_seconds: Number(r.video_time_seconds ?? 0),
-            caption: r.caption ?? "",
-            similarity: Number(r.similarity ?? r.score ?? 0),
-            timestamp: (r.timestamp as string) ?? "",
-            frame_thumbnail_b64: r.frame_thumbnail_b64 as string | undefined,
-          }),
-        );
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
 
-        // Grid view: deduplicate to one result per camera (best match)
-        if (searchMode === "grid") {
-          searchResults = deduplicateByCamera(searchResults);
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              currentEventType = line.slice(7).trim();
+            } else if (line.startsWith("data: ")) {
+              const raw = line.slice(6).trim();
+              if (!raw) continue;
+
+              if (currentEventType === "results") {
+                // ── Phase 1 complete: reranking done, show clips immediately ──
+                setIsSearching(false);
+                setIsSynthesizing(true);
+
+                let rawResults: Record<string, unknown>[] = [];
+                try { rawResults = JSON.parse(raw); } catch { /* ignore */ }
+
+                let searchResults: SearchResult[] = rawResults.map((r) => ({
+                  chroma_id: (r.chroma_id ?? r.id ?? generateId()) as string,
+                  camera_id: (r.camera_id ?? "") as string,
+                  camera_name: (r.camera_name ?? "Unknown Camera") as string,
+                  video_time_seconds: Number(r.video_time_seconds ?? 0),
+                  caption: (r.caption ?? "") as string,
+                  similarity: Number(r.similarity ?? r.score ?? 0),
+                  timestamp: (r.timestamp ?? "") as string,
+                  frame_thumbnail_b64: r.frame_thumbnail_b64 as string | undefined,
+                }));
+
+                if (searchMode === "grid") {
+                  searchResults = deduplicateByCamera(searchResults);
+                }
+
+                const countLabel =
+                  searchMode === "grid"
+                    ? `${searchResults.length} camera${searchResults.length !== 1 ? "s" : ""} matched`
+                    : `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""} found`;
+
+                setResults(searchResults);
+                setMessages((prev) => [
+                  ...prev,
+                  // Placeholder assistant bubble — will fill in as chunks arrive
+                  { id: assistantMsgId, type: "assistant", content: "", timestamp: new Date() },
+                  { id: resultsMsgId, type: "results", content: countLabel, results: searchResults, timestamp: new Date(), mode: searchMode },
+                ]);
+                resultsShown = true;
+
+              } else if (currentEventType === "chunk") {
+                // ── Phase 2: stream answer text into the assistant bubble ──
+                const chunk = raw.startsWith('"') ? JSON.parse(raw) : raw;
+                answerAccumulator += chunk;
+                const currentAnswer = answerAccumulator;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: currentAnswer }
+                      : m,
+                  ),
+                );
+
+              } else if (currentEventType === "done") {
+                // ── Stream complete ──
+                setIsSynthesizing(false);
+                // If we never got a results event (empty result set), show fallback
+                if (!resultsShown) {
+                  try {
+                    const doneData = JSON.parse(raw);
+                    const fallbackAnswer = doneData?.answer ?? "No matching footage found.";
+                    setMessages((prev) => [
+                      ...prev,
+                      { id: assistantMsgId, type: "assistant", content: fallbackAnswer, timestamp: new Date() },
+                    ]);
+                  } catch { /* ignore */ }
+                }
+              }
+            }
+          }
         }
-
-        const countLabel =
-          searchMode === "grid"
-            ? `${searchResults.length} camera${searchResults.length !== 1 ? "s" : ""} matched`
-            : `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""} found`;
-
-        const resultsMessage: Message = {
-          id: generateId(),
-          type: "results",
-          content: countLabel,
-          results: searchResults,
-          timestamp: new Date(),
-          mode: searchMode,
-        };
-
-        setResults(searchResults);
-        setMessages((prev) => [...prev, assistantMessage, resultsMessage]);
       } catch (err) {
-        const errorMessage: Message = {
-          id: generateId(),
-          type: "assistant",
-          content:
-            err instanceof Error
-              ? `Search failed: ${err.message}`
-              : "An unexpected error occurred while searching.",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, errorMessage]);
+        setIsSearching(false);
+        setIsSynthesizing(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateId(),
+            type: "assistant",
+            content: err instanceof Error ? `Search failed: ${err.message}` : "An unexpected error occurred while searching.",
+            timestamp: new Date(),
+          },
+        ]);
       } finally {
         setIsSearching(false);
+        setIsSynthesizing(false);
       }
     },
-    [query, isSearching, isGridView, currentCameraId],
+    [query, isSearching, isSynthesizing, isGridView, currentCameraId],
   );
 
   // -------------------------------------------------------------------------
@@ -474,13 +519,25 @@ export function QueryPanel({
                 return null;
               })}
 
-              {/* Searching indicator */}
+              {/* Searching indicator — reranking phase */}
               {isSearching && (
                 <div className="flex justify-start">
                   <div className="flex items-center gap-2 rounded-lg bg-muted/60 border border-border/50 px-3 py-2">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
                       Searching {isGridView ? "all cameras" : (currentCameraName || "camera")}...
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Synthesizing indicator — answer streaming phase */}
+              {isSynthesizing && (
+                <div className="flex justify-start">
+                  <div className="flex items-center gap-2 rounded-lg bg-muted/60 border border-border/50 px-3 py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-500" />
+                    <span className="text-sm text-muted-foreground">
+                      Analyzing results...
                     </span>
                   </div>
                 </div>
@@ -508,7 +565,7 @@ export function QueryPanel({
             <Button
               type="submit"
               size="icon"
-              disabled={!query.trim() || isSearching}
+              disabled={!query.trim() || isSearching || isSynthesizing}
               className="shrink-0 bg-emerald-700 hover:bg-emerald-600 text-white border-emerald-800"
               aria-label="Send search query"
             >

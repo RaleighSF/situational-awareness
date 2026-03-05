@@ -15,12 +15,17 @@ from prompts.search_synthesis import search_synthesis_prompt
 logger = logging.getLogger("vss-api.search")
 
 # Minimum cosine similarity to even consider a result (pre-rerank filter)
-_MIN_SIMILARITY = 0.45
+# Kept low — Gemini reranker handles precision; we want broad recall here
+_MIN_SIMILARITY = 0.30
 
-# Over-fetch multiplier: pull 3× from ChromaDB so we have enough after reranking
-_OVERFETCH_MULTIPLIER = 3
+# Max candidates to send to Gemini reranker. ChromaDB's embedding ranking means
+# relevant results are always in the top N — fetching the entire corpus wastes
+# Gemini calls on captions that are semantically distant from the query.
+_MAX_RERANK_CANDIDATES = 80
 
-# Rerank relevance threshold (Gemini scores 0-10; results below this are dropped)
+# Rerank relevance threshold (Gemini scores 0-10; results below this are hidden).
+# 5 = "partially matches" — keeps strong partial matches (e.g. "dark pants" for
+# "dark clothing") while filtering out noise (0-4 = tangential or unrelated).
 _RERANK_THRESHOLD = 5
 
 
@@ -36,8 +41,9 @@ def _build_rerank_prompt(query: str, captions: list[dict]) -> str:
     """
     items = []
     for i, cap in enumerate(captions):
-        safe_caption = cap["caption"].replace("\n", " ").replace("\r", " ")[:200]
-        items.append(f"Caption {i}: {safe_caption}")
+        # 100 chars is enough for Gemini to judge relevance — shorter = fewer tokens = faster
+        safe_caption = cap["caption"].replace("\n", " ").replace("\r", " ")[:100]
+        items.append(f"{i}: {safe_caption}")
     items_block = "\n".join(items)
 
     return f"""Rate how well each video caption matches this search query. Give a score 0-10.
@@ -45,21 +51,23 @@ def _build_rerank_prompt(query: str, captions: list[dict]) -> str:
 QUERY: {query}
 
 SCORING GUIDE:
-- 9-10: Caption explicitly and directly describes what the query is asking for.
-- 7-8: Caption mentions something closely related (e.g. similar category, close synonym).
-- 4-6: Caption is tangentially related but doesn't clearly match the query.
-- 1-3: Caption mentions the general context but lacks the specific detail.
+- 9-10: Caption explicitly describes what the query asks for (direct match or clear synonym).
+- 7-8: Caption describes something closely related — e.g. "dark pants" or "black attire" for "dark clothing".
+- 5-6: Caption partially matches — some relevant details present but not the main focus.
+- 3-4: Caption is in the same general context with minor relevance (e.g. same setting, nearby topic).
+- 1-2: Caption mentions the general environment but lacks meaningful relevance to the query.
 - 0: Caption is completely unrelated to the query.
 
 RULES:
-- Score based ONLY on what is explicitly stated in the caption, not inferred.
-- Exact matches score higher than approximate/similar matches.
-- If the query asks about a specific color, only score high if that exact color is mentioned.
-- If the query asks about a specific action, only score high if that action is described.
+- Use semantic understanding — synonyms, partial matches, and implied attributes all count.
+- "Dark pants", "black attire", "dark attire", "dressed in black" all score highly for "dark clothing".
+- If the query is about clothing, score high for ANY caption that describes dark-colored garments on a person.
+- Score based on overall relevance, not just exact keyword presence.
+- A caption describing the same subject in different words should still score highly.
 
 {items_block}
 
-Output ONLY one score per line, index: score. Score ALL {len(items)} captions. Example:
+Output ONLY one score per line, index: score. You MUST score ALL {len(items)} captions — do not skip any. Example:
 0: 8
 1: 2
 2: 0
@@ -74,61 +82,75 @@ async def _rerank_with_gemini(
 ) -> list[dict]:
     """Use Gemini to score and filter results by true relevance.
 
-    Returns the candidates list with an added "rerank_score" key, sorted by score desc,
-    filtered to only those above _RERANK_THRESHOLD.
+    Batches candidates in groups of 50 to avoid context-window truncation when the
+    corpus is large. All batches run concurrently and scores are merged before sorting.
+
+    Returns candidates with similarity overwritten by Gemini score (0.0-1.0),
+    filtered to those at or above _RERANK_THRESHOLD.
     """
     if not candidates:
         return []
 
-    prompt = _build_rerank_prompt(query, candidates)
+    import re
+    _BATCH_SIZE = 50
 
-    try:
-        raw = await generate(
-            api_key=api_key,
-            prompt=prompt,
-            max_tokens=512,   # Each entry is ~20 tokens; 15 entries = ~300 tokens
-            temperature=0.0,
-        )
+    async def _score_batch(batch: list[dict], offset: int) -> dict[int, int]:
+        """Score a single batch. Returns {global_candidate_index: score}."""
+        prompt = _build_rerank_prompt(query, batch)
+        try:
+            raw = await generate(
+                api_key=api_key,
+                prompt=prompt,
+                max_tokens=1500,  # 50 captions × ~5 output tokens
+                temperature=0.0,
+            )
+            scores: dict[int, int] = {}
+            for line in raw.strip().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                m = re.search(r'(\d+)\D+(\d+)', line)
+                if m:
+                    local_idx, score = int(m.group(1)), int(m.group(2))
+                    scores[offset + local_idx] = score
+            return scores
+        except Exception as e:
+            logger.warning("Rerank batch (offset=%d) failed: %s", offset, e)
+            return {}
 
-        # Parse line-based scores: "0: 8\n1: 2\n..."
-        text = raw.strip()
-        score_map: dict[int, int] = {}
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            # Accept formats: "0: 8", "0 8", "Caption 0: 8"
-            import re
-            m = re.search(r'(\d+)\D+(\d+)', line)
-            if m:
-                idx, score = int(m.group(1)), int(m.group(2))
-                score_map[idx] = score
+    # Split into batches and run concurrently
+    batches = [
+        (candidates[i:i + _BATCH_SIZE], i)
+        for i in range(0, len(candidates), _BATCH_SIZE)
+    ]
+    batch_results = await asyncio.gather(
+        *[_score_batch(batch, offset) for batch, offset in batches]
+    )
 
-        if not score_map:
-            logger.warning("Rerank: could not parse any scores from response (len=%d): %s", len(text), text[:300])
-            raise ValueError("No scores parsed from rerank response")
+    # Merge all batch scores
+    score_map: dict[int, int] = {}
+    for partial in batch_results:
+        score_map.update(partial)
 
-        logger.info("Rerank scores: %s", score_map)
-
-        scored = []
-        for idx, score in score_map.items():
-            if 0 <= idx < len(candidates) and score >= _RERANK_THRESHOLD:
-                result = candidates[idx].copy()
-                result["similarity"] = round(score / 10.0, 4)
-                scored.append(result)
-
-        # Sort by rerank score descending
-        scored.sort(key=lambda r: r["similarity"], reverse=True)
-        logger.info(
-            "Reranked %d candidates → %d relevant (threshold=%d)",
-            len(candidates), len(scored), _RERANK_THRESHOLD,
-        )
-        return scored
-
-    except Exception as e:
-        logger.warning("Gemini rerank failed, falling back to embedding-only ranking: %s", e)
-        # Fallback: return all candidates as-is (no reranking)
+    if not score_map:
+        logger.warning("Rerank: no scores from any batch — falling back to embedding ranking")
         return candidates
+
+    logger.info("Rerank scores (%d/%d scored): %s", len(score_map), len(candidates), score_map)
+
+    scored = []
+    for idx, score in score_map.items():
+        if 0 <= idx < len(candidates) and score >= _RERANK_THRESHOLD:
+            result = candidates[idx].copy()
+            result["similarity"] = round(score / 10.0, 4)
+            scored.append(result)
+
+    scored.sort(key=lambda r: r["similarity"], reverse=True)
+    logger.info(
+        "Reranked %d candidates → %d relevant (threshold=%d)",
+        len(candidates), len(scored), _RERANK_THRESHOLD,
+    )
+    return scored
 
 
 # ---------------------------------------------------------------------------
@@ -149,8 +171,10 @@ async def _fetch_candidates(
     collection = get_chroma_collection(settings.chroma_persist_dir)
     where_filter = {"camera_id": camera_id} if camera_id else None
 
-    # Over-fetch so we have enough after filtering
-    fetch_count = min(n_results * _OVERFETCH_MULTIPLIER, 50)
+    # Fetch _MAX_RERANK_CANDIDATES from ChromaDB. The embedding model's cosine ranking
+    # ensures semantically relevant captions always appear in the top N — going beyond
+    # this just adds more Gemini batch calls for diminishing returns.
+    fetch_count = _MAX_RERANK_CANDIDATES
 
     chroma_results = search_captions(
         collection=collection,
@@ -172,6 +196,8 @@ async def _fetch_candidates(
     sql_map = {r["chroma_id"]: r for r in sql_records}
 
     candidates = []
+    seen_slots: set[tuple] = set()  # deduplicate on (camera_id, video_time_seconds)
+
     for i, chroma_id in enumerate(ids):
         raw_sim = 1.0 - (distances[i] / 2.0)
         display_sim = min(1.0, max(0.0, raw_sim))
@@ -180,12 +206,19 @@ async def _fetch_candidates(
         if display_sim < _MIN_SIMILARITY:
             continue
 
+        cam_id = metadatas[i].get("camera_id", "")
+        vid_time = metadatas[i].get("video_time_seconds", 0)
+        slot = (cam_id, vid_time)
+        if slot in seen_slots:
+            continue  # skip duplicate (same camera + timestamp indexed twice)
+        seen_slots.add(slot)
+
         sql_record = sql_map.get(chroma_id, {})
         candidates.append({
             "chroma_id": chroma_id,
-            "camera_id": metadatas[i].get("camera_id", ""),
+            "camera_id": cam_id,
             "camera_name": metadatas[i].get("camera_name", ""),
-            "video_time_seconds": metadatas[i].get("video_time_seconds", 0),
+            "video_time_seconds": vid_time,
             "caption": documents[i],
             "distance": distances[i],
             "similarity": round(display_sim, 4),
@@ -194,7 +227,7 @@ async def _fetch_candidates(
         })
 
     logger.info(
-        "ChromaDB returned %d results, %d passed similarity threshold (%.2f)",
+        "ChromaDB returned %d results, %d unique candidates passed threshold (%.2f)",
         len(ids), len(candidates), _MIN_SIMILARITY,
     )
     return candidates
@@ -242,7 +275,7 @@ async def search(
         answer = await generate(
             api_key=settings.gemini_api_key,
             prompt=prompt,
-            max_tokens=1024,
+            max_tokens=400,
             temperature=0.3,
         )
     except Exception as e:
@@ -301,7 +334,7 @@ async def search_streaming(
         async for chunk in generate_streaming(
             api_key=settings.gemini_api_key,
             prompt=prompt,
-            max_tokens=1024,
+            max_tokens=400,
             temperature=0.3,
         ):
             yield {"type": "chunk", "data": chunk}
