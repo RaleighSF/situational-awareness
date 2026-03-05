@@ -773,8 +773,6 @@ export default function Dashboard() {
     // Configurable smart sampling parameters
     const FRAME_COUNT = 8; // Number of frames to capture
     const MAX_DURATION_SECONDS = 32; // Cap video sampling at 32 seconds
-    const VISUAL_ANALYZING_DURATION = 12;
-
     setIsSceneAgentRunning(true);
     setSceneAgentPhase("recording");
     setSceneAgentElapsed(0);
@@ -823,51 +821,35 @@ export default function Dashboard() {
       // Calculate interval between frames (evenly spaced across video)
       const intervalSeconds = effectiveDuration / (frameCount - 1);
       
-      console.log(`[Scene Agent] Smart sampling: video=${videoDuration.toFixed(1)}s, effective=${effectiveDuration.toFixed(1)}s, interval=${intervalSeconds.toFixed(2)}s, frames=${frameCount}`);
+      console.log(`[Scene Agent] Instant capture: video=${videoDuration.toFixed(1)}s, effective=${effectiveDuration.toFixed(1)}s, interval=${intervalSeconds.toFixed(2)}s, frames=${frameCount}`);
 
-      const recordingStartTime = Date.now();
-      
-      // Start elapsed timer immediately for UI feedback
-      const elapsedInterval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
-        setSceneAgentElapsed(elapsed);
-      }, 1000);
+      // --- INSTANT SEEK-BASED CAPTURE ---
+      // Instead of waiting for real-time playback, seek the video to each
+      // timestamp and capture the frame instantly. This reduces capture time
+      // from ~30s (real-time) to <1s (seek-based).
+      const captureStartTime = Date.now();
 
-      // Wait for video to loop back to beginning for chronological sampling
-      console.log(`[Scene Agent] Waiting for video loop restart...`);
-      await videoPlayerRef.current?.waitForLoopRestart();
-      console.log(`[Scene Agent] Video restarted, beginning frame capture`);
-
-      // Capture frames evenly spaced across the video
-      let apiPromise: Promise<Response> | null = null;
-      
       for (let i = 0; i < frameCount; i++) {
+        const targetTime = i * intervalSeconds;
+
+        // Seek to the target timestamp and wait for frame to decode
+        await videoPlayerRef.current?.seekToTime(targetTime);
+
         const frameData = videoPlayerRef.current?.captureFrame(currentBoundingBox);
         if (frameData) {
           sceneAgentFramesRef.current.push(frameData);
           const currentVideoTime = videoPlayerRef.current?.getCurrentTime() || 0;
-          console.log(`[Scene Agent] Captured frame ${i + 1}/${frameCount} at video time ${currentVideoTime.toFixed(2)}s, size: ${Math.round(frameData.length / 1024)}KB`);
+          console.log(`[Scene Agent] Captured frame ${i + 1}/${frameCount} at video time ${currentVideoTime.toFixed(2)}s (target=${targetTime.toFixed(2)}s), size: ${Math.round(frameData.length / 1024)}KB`);
         } else {
-          console.log(`[Scene Agent] Frame ${i + 1}/${frameCount} capture failed - video not ready`);
+          console.log(`[Scene Agent] Frame ${i + 1}/${frameCount} capture failed at t=${targetTime.toFixed(2)}s`);
         }
+      }
 
-        // Wait for next frame interval (except after last frame)
-        if (i < frameCount - 1) {
-          await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
-        }
-      }
-      
-      clearInterval(elapsedInterval);
-      
-      // Start API call immediately after all frames captured
-      if (sceneAgentFramesRef.current.length > 0) {
-        apiPromise = apiRequest("POST", "/api/scene-agent/run", {
-          frames: sceneAgentFramesRef.current,
-          intervalSeconds: Math.round(intervalSeconds * 10) / 10, // Round to 1 decimal
-          durationSeconds: Math.round(effectiveDuration),
-          sceneContext: sceneAgentContext || undefined,
-        });
-      }
+      const captureMs = Date.now() - captureStartTime;
+      console.log(`[Scene Agent] All ${sceneAgentFramesRef.current.length} frames captured in ${captureMs}ms (instant seek)`);
+
+      // Resume video playback from the start after capture
+      await videoPlayerRef.current?.seekToTime(0);
 
       if (sceneAgentFramesRef.current.length === 0) {
         toast({
@@ -881,23 +863,23 @@ export default function Dashboard() {
         return;
       }
 
+      // --- ANALYZING PHASE ---
+      // Frames captured instantly, now send to API
       setSceneAgentPhase("analyzing");
       setSceneAgentElapsed(0);
-      
+
       const analyzingStartTime = Date.now();
       const analyzingInterval = setInterval(() => {
         const elapsed = Math.floor((Date.now() - analyzingStartTime) / 1000);
-        setSceneAgentElapsed(Math.min(elapsed, VISUAL_ANALYZING_DURATION));
+        setSceneAgentElapsed(elapsed);
       }, 1000);
 
-      if (!apiPromise) {
-        apiPromise = apiRequest("POST", "/api/scene-agent/run", {
-          frames: sceneAgentFramesRef.current,
-          intervalSeconds: Math.round(intervalSeconds * 10) / 10,
-          durationSeconds: Math.round(effectiveDuration),
-          sceneContext: sceneAgentContext || undefined,
-        });
-      }
+      const apiPromise = apiRequest("POST", "/api/scene-agent/run", {
+        frames: sceneAgentFramesRef.current,
+        intervalSeconds: Math.round(intervalSeconds * 10) / 10,
+        durationSeconds: Math.round(effectiveDuration),
+        sceneContext: sceneAgentContext || undefined,
+      });
 
       const response = await apiPromise;
       clearInterval(analyzingInterval);

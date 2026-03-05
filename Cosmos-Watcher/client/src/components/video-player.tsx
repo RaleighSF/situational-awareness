@@ -9,6 +9,7 @@ export interface VideoPlayerRef {
   getVideoDuration: () => number;
   getCurrentTime: () => number;
   waitForLoopRestart: () => Promise<void>;
+  seekToTime: (time: number) => Promise<void>;
 }
 
 interface VideoPlayerProps {
@@ -227,12 +228,41 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
       });
     }, []);
 
+    const seekToTime = useCallback((time: number) => {
+      return new Promise<void>((resolve) => {
+        const video = videoRef.current;
+        if (!video) {
+          resolve();
+          return;
+        }
+
+        // Clamp to valid range
+        const target = Math.max(0, Math.min(time, video.duration || 0));
+
+        // If already at the target time (within 0.1s), resolve immediately
+        if (Math.abs(video.currentTime - target) < 0.1) {
+          resolve();
+          return;
+        }
+
+        const handleSeeked = () => {
+          video.removeEventListener('seeked', handleSeeked);
+          // Small delay to ensure frame is decoded and paintable
+          requestAnimationFrame(() => resolve());
+        };
+
+        video.addEventListener('seeked', handleSeeked);
+        video.currentTime = target;
+      });
+    }, []);
+
     useImperativeHandle(ref, () => ({
       captureFrame: captureFrameWithBox,
       getVideoDuration,
       getCurrentTime,
       waitForLoopRestart,
-    }), [captureFrameWithBox, getVideoDuration, getCurrentTime, waitForLoopRestart]);
+      seekToTime,
+    }), [captureFrameWithBox, getVideoDuration, getCurrentTime, waitForLoopRestart, seekToTime]);
 
     const handleCaptureClick = () => {
       const frameData = captureFrameWithBox();
