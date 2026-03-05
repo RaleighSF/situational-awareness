@@ -25,6 +25,11 @@ logger = logging.getLogger("vss-api.indexer")
 # Embedding model — loaded once, runs on CPU
 _embedding_model: SentenceTransformer | None = None
 
+# Max concurrent Cosmos VLM calls — the GPU processes sequentially, so
+# sending too many concurrent requests just queues them on the HTTP side.
+# 2 allows one in-flight + one ready to go without starving the GPU.
+_MAX_CONCURRENT_VLM = 2
+
 
 def get_embedding_model() -> SentenceTransformer:
     """Lazy-load the sentence-transformers embedding model."""
@@ -46,6 +51,16 @@ class CaptionIndexer:
         self._rate_seconds = settings.caption_rate_seconds
         self._cosmos_endpoint = settings.cosmos_endpoint
         self._prompt = caption_prompt()
+        # Persistent HTTP client for frame capture requests (avoids per-call connection churn)
+        self._http_client: httpx.AsyncClient | None = None
+        # Semaphore to limit concurrent VLM inference calls
+        self._vlm_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_VLM)
+
+    def _get_http_client(self) -> httpx.AsyncClient:
+        """Return a persistent HTTP client for frame capture."""
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(timeout=15.0)
+        return self._http_client
 
     def stop(self):
         """Signal the indexer to stop."""
@@ -71,22 +86,29 @@ class CaptionIndexer:
             self.running = False
             return
 
-        logger.info("Indexing %d video sources in parallel, cycle every %ds.", len(sources), self._rate_seconds)
+        logger.info("Indexing %d video sources (max %d concurrent VLM calls), cycle every %ds.",
+                     len(sources), _MAX_CONCURRENT_VLM, self._rate_seconds)
 
-        while not self._stop_event.is_set():
-            # Index all sources concurrently each cycle
-            tasks = [self._index_source(source, model) for source in sources]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for source, result in zip(sources, results):
-                if isinstance(result, Exception):
-                    logger.error("Error indexing source %s: %s", source.get("name", "?"), result)
+        try:
+            while not self._stop_event.is_set():
+                # Index all sources concurrently each cycle (semaphore limits GPU pressure)
+                tasks = [self._index_source(source, model) for source in sources]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for source, result in zip(sources, results):
+                    if isinstance(result, Exception):
+                        logger.error("Error indexing source %s: %s", source.get("name", "?"), result)
 
-            # Wait for the next cycle
-            try:
-                await asyncio.wait_for(self._stop_event.wait(), timeout=self._rate_seconds)
-                break  # Stop event was set
-            except asyncio.TimeoutError:
-                continue  # Timeout = time for next cycle
+                # Wait for the next cycle
+                try:
+                    await asyncio.wait_for(self._stop_event.wait(), timeout=self._rate_seconds)
+                    break  # Stop event was set
+                except asyncio.TimeoutError:
+                    continue  # Timeout = time for next cycle
+        finally:
+            # Clean up persistent HTTP client
+            if self._http_client:
+                await self._http_client.aclose()
+                self._http_client = None
 
         self.running = False
         logger.info("Caption indexer stopped.")
@@ -94,12 +116,12 @@ class CaptionIndexer:
     async def _fetch_video_sources(self) -> list[dict]:
         """Fetch video sources from the Cosmos-Watcher API."""
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(f"{self.settings.frontend_api_url}/api/video-sources")
-                response.raise_for_status()
-                sources = response.json()
-                logger.info("Found %d video sources.", len(sources))
-                return sources
+            client = self._get_http_client()
+            response = await client.get(f"{self.settings.frontend_api_url}/api/video-sources")
+            response.raise_for_status()
+            sources = response.json()
+            logger.info("Found %d video sources.", len(sources))
+            return sources
         except Exception as e:
             logger.error("Failed to fetch video sources: %s", e)
             return []
@@ -145,18 +167,19 @@ class CaptionIndexer:
         if not frame_b64:
             return
 
-        # Generate caption via Cosmos VLM
-        try:
-            caption_text = await infer(
-                endpoint=self._cosmos_endpoint,
-                image_b64=frame_b64,
-                prompt=self._prompt,
-                mode="qa",
-                max_new_tokens=512,
-            )
-        except Exception as e:
-            logger.error("Cosmos caption failed for %s at t=%ds: %s", camera_name, current_video_time, e)
-            return
+        # Generate caption via Cosmos VLM (rate-limited by semaphore)
+        async with self._vlm_semaphore:
+            try:
+                caption_text = await infer(
+                    endpoint=self._cosmos_endpoint,
+                    image_b64=frame_b64,
+                    prompt=self._prompt,
+                    mode="qa",
+                    max_new_tokens=512,
+                )
+            except Exception as e:
+                logger.error("Cosmos caption failed for %s at t=%ds: %s", camera_name, current_video_time, e)
+                return
 
         if not caption_text or len(caption_text) < 10:
             logger.warning("Empty or too-short caption for %s at t=%ds", camera_name, current_video_time)
@@ -177,9 +200,9 @@ class CaptionIndexer:
         }
         add_caption(collection, chroma_id, caption_text, embedding_list, metadata)
 
-        # Store in SQLite
-        # Create a small thumbnail (just store first 500 chars of b64 as reference)
-        thumb_b64 = frame_b64[:500] if len(frame_b64) > 500 else frame_b64
+        # Store in SQLite with full frame thumbnail for search result display.
+        # The frame is already ~768px max side from ffmpeg extraction, so storing
+        # the full b64 is reasonable (~80-120KB per frame).
         await insert_caption(
             camera_id=camera_id,
             camera_name=camera_name,
@@ -187,7 +210,7 @@ class CaptionIndexer:
             video_time_seconds=current_video_time,
             caption=caption_text,
             chroma_id=chroma_id,
-            frame_thumbnail_b64=thumb_b64,
+            frame_thumbnail_b64=frame_b64,
         )
 
         # Update indexer state
@@ -204,40 +227,29 @@ class CaptionIndexer:
     async def _capture_frame(self, video_url: str, time_offset: float) -> str | None:
         """Capture a frame from a video source at a given time offset.
 
-        For hosted MP4 videos, this downloads and extracts a frame.
-        For live RTSP streams (Phase 2+), this would connect to the stream.
+        For hosted MP4 videos, this requests frame extraction from the Express backend
+        (which uses ffmpeg with downscaling to 768px max side).
 
         Returns base64-encoded JPEG image, or None on failure.
         """
-        # For the demo, we POST to a frame extraction endpoint on the Express backend
-        # or we can use a simple approach: download the video headers to check duration
-        # and then use a canvas-based extraction (client-side) or ffmpeg (server-side).
-        #
-        # Since the Cosmos-Watcher frontend already captures frames via canvas,
-        # we'll use a simple HTTP-based approach: request a frame from the Express backend.
-        # If no frame extraction endpoint exists, we'll add one.
-        #
-        # For now: attempt to capture via a /api/capture-frame endpoint
-        # Fallback: return None and log
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(
-                    f"http://localhost:5000/api/capture-frame",
-                    json={"url": video_url, "time_offset": time_offset},
+            client = self._get_http_client()
+            response = await client.post(
+                f"http://localhost:5000/api/capture-frame",
+                json={"url": video_url, "time_offset": time_offset},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("frame_b64", None)
+            else:
+                logger.debug(
+                    "Frame capture endpoint not available (status %d). "
+                    "Skipping frame for url=%s t=%.0f",
+                    response.status_code,
+                    video_url[:50],
+                    time_offset,
                 )
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get("frame_b64", None)
-                else:
-                    # Fallback: for MP4s, we can try to download and use a placeholder
-                    logger.debug(
-                        "Frame capture endpoint not available (status %d). "
-                        "Skipping frame for url=%s t=%.0f",
-                        response.status_code,
-                        video_url[:50],
-                        time_offset,
-                    )
-                    return None
+                return None
         except Exception as e:
             logger.debug("Frame capture failed: %s", e)
             return None

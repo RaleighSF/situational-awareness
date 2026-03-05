@@ -1,6 +1,7 @@
 """Alert explanation service — sends alert frame + context to Cosmos VLM for structured reasoning."""
 
 import logging
+import re
 
 from config import Settings
 from services.cosmos_client import infer
@@ -8,6 +9,18 @@ from prompts.explain import explain_alert_prompt, explain_with_context_prompt
 from db.sqlite import get_captions_for_camera
 
 logger = logging.getLogger("vss-api.explain")
+
+# Pre-compiled regexes for response parsing (called on every explain response)
+_RE_THINKING = re.compile(r'<think>([\s\S]*?)</think>')
+_RE_VERDICT = re.compile(r'VERDICT:\s*(TRUE POSITIVE|FALSE POSITIVE|INCONCLUSIVE)', re.IGNORECASE)
+_RE_CONFIDENCE = re.compile(r'CONFIDENCE:\s*(HIGH|MEDIUM|LOW)', re.IGNORECASE)
+_SECTION_PATTERNS = {
+    "description": re.compile(r'DESCRIPTION:\s*\n?([\s\S]*?)(?=\n(?:EVIDENCE|ENVIRONMENTAL|RECOMMENDATION|$))', re.IGNORECASE),
+    "evidence_for": re.compile(r'EVIDENCE FOR ALERT:\s*\n?([\s\S]*?)(?=\n(?:EVIDENCE AGAINST|ENVIRONMENTAL|RECOMMENDATION|$))', re.IGNORECASE),
+    "evidence_against": re.compile(r'EVIDENCE AGAINST ALERT:\s*\n?([\s\S]*?)(?=\n(?:ENVIRONMENTAL|RECOMMENDATION|$))', re.IGNORECASE),
+    "environmental": re.compile(r'ENVIRONMENTAL FACTORS:\s*\n?([\s\S]*?)(?=\n(?:RECOMMENDATION|$))', re.IGNORECASE),
+    "recommendation": re.compile(r'RECOMMENDATION:\s*\n?([\s\S]*?)$', re.IGNORECASE),
+}
 
 
 async def explain_alert(
@@ -100,9 +113,7 @@ def _extract_thinking(text: str) -> tuple[str | None, str]:
 
     Returns (thinking_text, remaining_text).
     """
-    import re
-
-    match = re.search(r'<think>([\s\S]*?)</think>', text)
+    match = _RE_THINKING.search(text)
     if match:
         thinking = match.group(1).strip()
         remaining = text[:match.start()] + text[match.end():]
@@ -112,8 +123,6 @@ def _extract_thinking(text: str) -> tuple[str | None, str]:
 
 def _parse_explanation(text: str) -> dict:
     """Parse the structured explanation response into sections."""
-    import re
-
     result = {
         "verdict": "INCONCLUSIVE",
         "confidence": "MEDIUM",
@@ -121,26 +130,18 @@ def _parse_explanation(text: str) -> dict:
     }
 
     # Extract verdict
-    verdict_match = re.search(r'VERDICT:\s*(TRUE POSITIVE|FALSE POSITIVE|INCONCLUSIVE)', text, re.IGNORECASE)
+    verdict_match = _RE_VERDICT.search(text)
     if verdict_match:
         result["verdict"] = verdict_match.group(1).upper()
 
     # Extract confidence
-    conf_match = re.search(r'CONFIDENCE:\s*(HIGH|MEDIUM|LOW)', text, re.IGNORECASE)
+    conf_match = _RE_CONFIDENCE.search(text)
     if conf_match:
         result["confidence"] = conf_match.group(1).upper()
 
     # Extract sections
-    section_patterns = {
-        "description": r'DESCRIPTION:\s*\n?([\s\S]*?)(?=\n(?:EVIDENCE|ENVIRONMENTAL|RECOMMENDATION|$))',
-        "evidence_for": r'EVIDENCE FOR ALERT:\s*\n?([\s\S]*?)(?=\n(?:EVIDENCE AGAINST|ENVIRONMENTAL|RECOMMENDATION|$))',
-        "evidence_against": r'EVIDENCE AGAINST ALERT:\s*\n?([\s\S]*?)(?=\n(?:ENVIRONMENTAL|RECOMMENDATION|$))',
-        "environmental": r'ENVIRONMENTAL FACTORS:\s*\n?([\s\S]*?)(?=\n(?:RECOMMENDATION|$))',
-        "recommendation": r'RECOMMENDATION:\s*\n?([\s\S]*?)$',
-    }
-
-    for key, pattern in section_patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
+    for key, pattern in _SECTION_PATTERNS.items():
+        match = pattern.search(text)
         if match:
             result["sections"][key] = match.group(1).strip()
 

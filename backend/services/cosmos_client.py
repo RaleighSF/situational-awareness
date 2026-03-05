@@ -4,12 +4,33 @@ Adapted from proc-assist/app.py Pydantic models and inference patterns.
 """
 
 import logging
+import re
+
 import httpx
 
 logger = logging.getLogger("vss-api.cosmos")
 
 # Timeout: Cosmos inference can take 30-90s per frame depending on load
 _TIMEOUT = httpx.Timeout(120.0, connect=10.0)
+
+# Persistent HTTP client — avoids TCP/TLS handshake on every call
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Return a module-level persistent async HTTP client."""
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
+
+# Pre-compiled regexes for stripping chat markers (called on every response)
+_RE_HEADING_ROLE = re.compile(r'^#{1,3}\s*(User|Assistant|System):\s*', re.IGNORECASE | re.MULTILINE)
+_RE_BARE_ROLE = re.compile(r'^(user|assistant|system):\s*', re.IGNORECASE | re.MULTILINE)
+_RE_SPECIAL_TOKENS = re.compile(r'<\|?(user|assistant|system|im_start|im_end|end_of_turn)\|?>\n?', re.IGNORECASE)
+_RE_INST_TAGS = re.compile(r'\[INST\]|\[/INST\]', re.IGNORECASE)
+_RE_SYS_TAGS = re.compile(r'<<SYS>>|<</SYS>>', re.IGNORECASE)
 
 
 async def infer(
@@ -50,14 +71,14 @@ async def infer(
     if scene_context:
         payload["scene_context"] = scene_context
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        response = await client.post(f"{endpoint}/infer", json=payload)
-        response.raise_for_status()
-        result = response.json()
-        text = result.get("text", "")
-        # Strip chat markers (model sometimes echoes role tokens)
-        text = _strip_chat_markers(text)
-        return text
+    client = _get_client()
+    response = await client.post(f"{endpoint}/infer", json=payload)
+    response.raise_for_status()
+    result = response.json()
+    text = result.get("text", "")
+    # Strip chat markers (model sometimes echoes role tokens)
+    text = _strip_chat_markers(text)
+    return text
 
 
 async def infer_batch(
@@ -89,21 +110,20 @@ async def infer_batch(
 
     payload = {"items": items}
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
-        response = await client.post(f"{endpoint}/infer_batch", json=payload)
-        response.raise_for_status()
-        result = response.json()
-        results = result.get("results", [])
-        return [_strip_chat_markers(r.get("text", "")) for r in results]
+    client = _get_client()
+    response = await client.post(f"{endpoint}/infer_batch", json=payload)
+    response.raise_for_status()
+    result = response.json()
+    results = result.get("results", [])
+    return [_strip_chat_markers(r.get("text", "")) for r in results]
 
 
 def _strip_chat_markers(text: str) -> str:
     """Remove common chat/role markers from model output."""
-    import re
     cleaned = text
-    cleaned = re.sub(r'^#{1,3}\s*(User|Assistant|System):\s*', '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
-    cleaned = re.sub(r'^(user|assistant|system):\s*', '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
-    cleaned = re.sub(r'<\|?(user|assistant|system|im_start|im_end|end_of_turn)\|?>\n?', '', cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'\[INST\]|\[/INST\]', '', cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'<<SYS>>|<</SYS>>', '', cleaned, flags=re.IGNORECASE)
+    cleaned = _RE_HEADING_ROLE.sub('', cleaned)
+    cleaned = _RE_BARE_ROLE.sub('', cleaned)
+    cleaned = _RE_SPECIAL_TOKENS.sub('', cleaned)
+    cleaned = _RE_INST_TAGS.sub('', cleaned)
+    cleaned = _RE_SYS_TAGS.sub('', cleaned)
     return cleaned.strip()

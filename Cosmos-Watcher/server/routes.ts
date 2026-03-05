@@ -365,82 +365,24 @@ interface MarkCountResult {
   notes?: string;
 }
 
-async function classifyCountingIntent(userPrompt: string): Promise<boolean> {
-  if (!GEMINI_API_KEY) {
-    return isCountingPromptFallback(userPrompt);
-  }
-
-  try {
-    const payload = {
-      contents: [
-        {
-          parts: [
-            {
-              text: `You are a classifier that determines if a user's question about an image requires counting or enumeration.
-
-Respond with ONLY "count" or "qa" (no other text).
-
-Respond "count" for:
-- "How many..." questions
-- "Count the..." requests
-- "Number of..." queries
-- Inventory-style questions ("How many boxes/cars/people?")
-- Comparison counts ("Are there more than N...")
-- Attribute-specific counts ("How many have white labels?", "How many wearing hard hats?")
-- List and count requests ("List each ... and count them")
-- Location-specific counts ("How many pallets on the left?", "How many vehicles in the lane?")
-
-Respond "qa" for:
-- Descriptions ("What's happening?", "Describe the scene")
-- Reasoning ("Is this unsafe?", "Why did the alert fire?")
-- Policy/intent questions ("Is someone unauthorized?")
-- Summaries ("Summarize the scene")
-- Yes/no questions not about quantity
-- Identification questions ("What type of vehicle is that?")
-
-User question: ${userPrompt}`
-            }
-          ]
-        }
-      ],
-      generationConfig: {
-        maxOutputTokens: 10,
-        temperature: 0
-      }
-    };
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      }
-    );
-
-    if (!response.ok) {
-      return isCountingPromptFallback(userPrompt);
-    }
-
-    const result = await response.json();
-    const classification = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toLowerCase() || "qa";
-    return classification === "count";
-  } catch (error) {
-    return isCountingPromptFallback(userPrompt);
-  }
-}
-
-function isCountingPromptFallback(prompt: string): boolean {
-  const lowerPrompt = prompt.toLowerCase();
+/**
+ * Classify whether a user prompt requires counting/enumeration (mark_count mode)
+ * or general QA analysis. Uses regex patterns — eliminates a Gemini API round-trip
+ * (~200-500ms) with equivalent accuracy for demo use cases.
+ */
+function classifyCountingIntent(userPrompt: string): boolean {
+  const lowerPrompt = userPrompt.toLowerCase();
   const countingPatterns = [
-    /how many/i,
-    /count the/i,
-    /number of/i,
-    /\bhow\s+many\b/i,
-    /\bcount\b/i,
-    /are there more than \d+/i,
-    /list each .* and count/i,
-    /\btotal\b.*\b(items?|objects?|people|persons?|vehicles?|cars?|boxes?)\b/i,
+    /\bhow\s+many\b/,
+    /\bcount\s+(the|all|each|every)\b/,
+    /\bnumber\s+of\b/,
+    /\bare\s+there\s+more\s+than\s+\d+/,
+    /\blist\s+(each|all|every)\b.*\bcount\b/,
+    /\btotal\b.*\b(items?|objects?|people|persons?|vehicles?|cars?|boxes?|pallets?|workers?)\b/,
+    /\btally\b/,
+    /\benumerate\b/,
+    /\bquantity\b/,
+    /\binventory\b/,
   ];
   return countingPatterns.some(pattern => pattern.test(lowerPrompt));
 }
@@ -608,8 +550,8 @@ async function analyzeWithCosmosAdhoc(
     return { result: "Invalid frame captured - video may not be loaded", model: "none", mode: "qa" };
   }
 
-  // Use Gemini to classify if this is a counting query
-  const isCountingQuery = await classifyCountingIntent(userPrompt);
+  // Classify via regex (no Gemini round-trip needed)
+  const isCountingQuery = classifyCountingIntent(userPrompt);
   
   if (isCountingQuery) {
     try {
@@ -1386,12 +1328,15 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Video file not found" });
       }
 
-      // Use ffmpeg to extract a single frame at the given time offset as JPEG to stdout
+      // Use ffmpeg to extract a single frame at the given time offset as JPEG to stdout.
+      // Downscale to 768px max side to match client-side capture resolution and reduce
+      // base64 payload size by ~60-75% (from ~300-500KB to ~80-120KB).
       const timeStr = Math.max(0, Number(time_offset)).toFixed(2);
       const { stdout } = await execFileAsync("ffmpeg", [
         "-ss", timeStr,
         "-i", filePath,
         "-frames:v", "1",
+        "-vf", "scale='min(768,iw)':'min(768,ih)':force_original_aspect_ratio=decrease",
         "-f", "image2",
         "-vcodec", "mjpeg",
         "-q:v", "5",

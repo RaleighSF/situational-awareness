@@ -164,7 +164,8 @@ async def _fetch_candidates(
     n_results: int,
 ) -> list[dict]:
     """Embed query, search ChromaDB, apply similarity threshold, enrich with SQLite metadata."""
-    model = await asyncio.to_thread(get_embedding_model)
+    # Synchronous lookup — just returns cached global, no thread dispatch needed
+    model = get_embedding_model()
     query_embedding = await asyncio.to_thread(model.encode, query)
     query_embedding_list = query_embedding.tolist()
 
