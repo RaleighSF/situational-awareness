@@ -505,10 +505,10 @@ export function QueryPanel({
                             __html: msg.content
                               // Bold: **text** → <strong>
                               .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-                              // Strip any leftover ** (e.g. mid-stream or unmatched)
-                              .replace(/\*\*/g, "")
-                              // Italic: *text* → <em>
+                              // Italic: *text* → <em>  (must run before stripping lone *)
                               .replace(/\*(.+?)\*/g, "<em>$1</em>")
+                              // Strip ALL remaining asterisks (mid-stream partials, unmatched markers)
+                              .replace(/\*/g, "")
                               // Numbered lists: "1. item" → <li>
                               .replace(/^\d+\.\s+(.+)/gm, "<li>$1</li>")
                               // Bullet lists: "- item" or "• item"
