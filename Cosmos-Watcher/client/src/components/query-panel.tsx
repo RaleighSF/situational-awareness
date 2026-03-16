@@ -146,7 +146,7 @@ function ResultCard({
         {/* Thumbnail */}
         {result.frame_thumbnail_b64 && (
           <img
-            src={result.frame_thumbnail_b64}
+            src={result.frame_thumbnail_b64.startsWith("data:") ? result.frame_thumbnail_b64 : `data:image/jpeg;base64,${result.frame_thumbnail_b64}`}
             alt=""
             className="w-16 h-12 rounded object-cover shrink-0 bg-black/40"
           />
@@ -499,9 +499,21 @@ export function QueryPanel({
                   return (
                     <div key={msg.id} className="flex justify-start">
                       <div className="max-w-[85%] rounded-lg bg-muted/60 border border-border/50 px-3 py-2">
-                        <p className="text-sm text-foreground leading-relaxed">
-                          {msg.content}
-                        </p>
+                        <div
+                          className="text-sm text-foreground leading-relaxed prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0"
+                          dangerouslySetInnerHTML={{
+                            __html: msg.content
+                              .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+                              .replace(/\*(.+?)\*/g, "<em>$1</em>")
+                              .replace(/^[-•]\s+(.+)/gm, "<li>$1</li>")
+                              .replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>")
+                              .replace(/<\/ul>\s*<ul>/g, "")
+                              .replace(/\n{2,}/g, "</p><p>")
+                              .replace(/\n/g, "<br/>")
+                              .replace(/^(.+)/, "<p>$1")
+                              .replace(/(.+)$/, "$1</p>"),
+                          }}
+                        />
                       </div>
                     </div>
                   );
