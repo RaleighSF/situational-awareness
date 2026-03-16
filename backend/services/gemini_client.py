@@ -27,7 +27,6 @@ async def generate(
     model: str = "gemini-2.5-flash",
     max_tokens: int = 2048,
     temperature: float = 0.3,
-    thinking: bool = True,
 ) -> str:
     """Generate text using Gemini.
 
@@ -37,27 +36,20 @@ async def generate(
         model: Model name (default: gemini-2.5-flash).
         max_tokens: Maximum output tokens.
         temperature: Sampling temperature.
-        thinking: Whether to enable Gemini 2.5's thinking/reasoning mode.
-            Disable for simple structured tasks (scoring, classification)
-            to save tokens and reduce latency.
 
     Returns:
         Generated text response.
     """
     client = get_client(api_key)
 
-    config_kwargs: dict = {
-        "max_output_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    if not thinking:
-        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
-
     try:
         response = client.models.generate_content(
             model=model,
             contents=prompt,
-            config=types.GenerateContentConfig(**config_kwargs),
+            config=types.GenerateContentConfig(
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+            ),
         )
         return response.text or ""
     except Exception as e:

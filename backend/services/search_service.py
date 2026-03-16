@@ -105,9 +105,9 @@ async def _rerank_with_gemini(
             raw = await generate(
                 api_key=api_key,
                 prompt=prompt,
+                model="gemini-2.0-flash",  # 2.0 has no thinking overhead — fast for scoring
                 max_tokens=1500,
                 temperature=0.0,
-                thinking=False,  # simple scoring task — no reasoning needed
             )
             scores: dict[int, int] = {}
             for line in raw.strip().splitlines():
