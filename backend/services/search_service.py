@@ -105,7 +105,7 @@ async def _rerank_with_gemini(
             raw = await generate(
                 api_key=api_key,
                 prompt=prompt,
-                model="gemini-2.0-flash",  # 2.0 has no thinking overhead — fast for scoring
+                model="gemini-2.5-flash-lite",  # lite model: fast scoring without thinking overhead
                 max_tokens=1500,
                 temperature=0.0,
             )
