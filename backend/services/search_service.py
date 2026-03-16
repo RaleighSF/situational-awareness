@@ -21,7 +21,8 @@ _MIN_SIMILARITY = 0.30
 # Max candidates to send to Gemini reranker. ChromaDB's embedding ranking means
 # relevant results are always in the top N — fetching the entire corpus wastes
 # Gemini calls on captions that are semantically distant from the query.
-_MAX_RERANK_CANDIDATES = 80
+# 40 keeps batch count low (2 batches of 25) for fast reranking.
+_MAX_RERANK_CANDIDATES = 40
 
 # Rerank relevance threshold (Gemini scores 0-10; results below this are hidden).
 # 6 = "closely related" — keeps strong matches while filtering out vague/generic
@@ -104,8 +105,9 @@ async def _rerank_with_gemini(
             raw = await generate(
                 api_key=api_key,
                 prompt=prompt,
-                max_tokens=4096,  # generous budget to account for thinking tokens
+                max_tokens=1500,
                 temperature=0.0,
+                thinking=False,  # simple scoring task — no reasoning needed
             )
             scores: dict[int, int] = {}
             for line in raw.strip().splitlines():
