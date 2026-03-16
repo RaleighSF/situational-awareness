@@ -92,7 +92,10 @@ async def _rerank_with_gemini(
         return []
 
     import re
-    _BATCH_SIZE = 50
+    # Smaller batches = Gemini can reliably score all items without truncation.
+    # Gemini 2.5 Flash uses thinking tokens that eat into max_tokens budget,
+    # so 25 items × ~5 output tokens + thinking overhead ≈ needs ~2000 tokens.
+    _BATCH_SIZE = 25
 
     async def _score_batch(batch: list[dict], offset: int) -> dict[int, int]:
         """Score a single batch. Returns {global_candidate_index: score}."""
@@ -101,7 +104,7 @@ async def _rerank_with_gemini(
             raw = await generate(
                 api_key=api_key,
                 prompt=prompt,
-                max_tokens=1500,  # 50 captions × ~5 output tokens
+                max_tokens=4096,  # generous budget to account for thinking tokens
                 temperature=0.0,
             )
             scores: dict[int, int] = {}
@@ -113,6 +116,10 @@ async def _rerank_with_gemini(
                 if m:
                     local_idx, score = int(m.group(1)), int(m.group(2))
                     scores[offset + local_idx] = score
+            logger.info(
+                "Rerank batch (offset=%d): scored %d/%d items",
+                offset, len(scores), len(batch),
+            )
             return scores
         except Exception as e:
             logger.warning("Rerank batch (offset=%d) failed: %s", offset, e)
