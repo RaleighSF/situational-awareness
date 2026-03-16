@@ -24,9 +24,9 @@ _MIN_SIMILARITY = 0.30
 _MAX_RERANK_CANDIDATES = 80
 
 # Rerank relevance threshold (Gemini scores 0-10; results below this are hidden).
-# 5 = "partially matches" — keeps strong partial matches (e.g. "dark pants" for
-# "dark clothing") while filtering out noise (0-4 = tangential or unrelated).
-_RERANK_THRESHOLD = 5
+# 6 = "closely related" — keeps strong matches while filtering out vague/generic
+# partial matches (e.g. "workers" when query specifically asks for "workers with lanyards").
+_RERANK_THRESHOLD = 6
 
 
 # ---------------------------------------------------------------------------
@@ -53,16 +53,16 @@ QUERY: {query}
 SCORING GUIDE:
 - 9-10: Caption explicitly describes what the query asks for (direct match or clear synonym).
 - 7-8: Caption describes something closely related — e.g. "dark pants" or "black attire" for "dark clothing".
-- 5-6: Caption partially matches — some relevant details present but not the main focus.
-- 3-4: Caption is in the same general context with minor relevance (e.g. same setting, nearby topic).
-- 1-2: Caption mentions the general environment but lacks meaningful relevance to the query.
+- 5-6: Caption partially matches — key elements of the query are present but only as minor details.
+- 3-4: Caption shares the general setting but does NOT describe what the query specifically asks for.
+- 1-2: Caption mentions the general environment with no meaningful relevance to the query.
 - 0: Caption is completely unrelated to the query.
 
 RULES:
-- Use semantic understanding — synonyms, partial matches, and implied attributes all count.
-- "Dark pants", "black attire", "dark attire", "dressed in black" all score highly for "dark clothing".
-- If the query is about clothing, score high for ANY caption that describes dark-colored garments on a person.
-- Score based on overall relevance, not just exact keyword presence.
+- Be STRICT about specificity. The query describes something specific — only score highly if the caption addresses that specific thing.
+- Generic scene matches are NOT enough. "Workers in a warehouse" does NOT match "workers wearing lanyards" unless the caption actually mentions lanyards or neck-worn items.
+- Synonyms and closely related terms count: "dark pants" = "black trousers", "lanyard" = "badge on a neck strap".
+- If the query asks about a specific attribute (clothing item, color, action), the caption MUST mention that attribute or a clear synonym to score above 6.
 - A caption describing the same subject in different words should still score highly.
 
 {items_block}

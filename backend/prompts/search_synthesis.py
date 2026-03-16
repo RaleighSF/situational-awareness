@@ -24,12 +24,16 @@ def search_synthesis_prompt(user_query: str, captions: list[dict], mode: str = "
         # Single camera view — focus on moments/timestamps within one feed
         mode_instructions = """CONTEXT: User is viewing a single camera feed, looking for specific moments.
 
-Instructions: List matching moments chronologically by timestamp. For each: time and brief description of what was observed. Keep it very concise — 2-3 sentences max total. No disclaimers."""
+Instructions: List matching moments chronologically. For each: time and brief description of what was observed. Keep it very concise — 2-3 sentences max total.
+
+FORMATTING: Write in plain text only. Do NOT use any markdown — no asterisks, no bold (**), no italic (*), no bullet points, no headers. Just clean sentences."""
     else:
         # Grid view — focus on which cameras have matches, one best result per camera
         mode_instructions = """CONTEXT: User is viewing all cameras in a grid, looking for which cameras have matches.
 
-Instructions: For each matching camera, state the camera name, timestamp, and one sentence describing what was found. Lead with a brief summary of how many cameras matched. Keep it very concise. No disclaimers."""
+Instructions: For each matching camera, state the camera name, timestamp, and one sentence describing what was found. Lead with a brief summary of how many cameras matched. Keep it very concise.
+
+FORMATTING: Write in plain text only. Do NOT use any markdown — no asterisks, no bold (**), no italic (*), no bullet points, no headers. Just clean sentences separated by line breaks."""
 
     return f"""You are an AI video analytics assistant. A user is searching through indexed video surveillance footage. These results have already been filtered for relevance.
 
