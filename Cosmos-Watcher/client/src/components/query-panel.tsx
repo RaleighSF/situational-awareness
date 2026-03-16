@@ -500,16 +500,28 @@ export function QueryPanel({
                     <div key={msg.id} className="flex justify-start">
                       <div className="max-w-[85%] rounded-lg bg-muted/60 border border-border/50 px-3 py-2">
                         <div
-                          className="text-sm text-foreground leading-relaxed prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0"
+                          className="text-sm text-foreground leading-relaxed [&_strong]:font-semibold [&_strong]:text-foreground [&_em]:italic [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:my-1 [&_li]:my-0.5 [&_p]:my-1"
                           dangerouslySetInnerHTML={{
                             __html: msg.content
+                              // Bold: **text** → <strong>
                               .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+                              // Strip any leftover ** (e.g. mid-stream or unmatched)
+                              .replace(/\*\*/g, "")
+                              // Italic: *text* → <em>
                               .replace(/\*(.+?)\*/g, "<em>$1</em>")
+                              // Numbered lists: "1. item" → <li>
+                              .replace(/^\d+\.\s+(.+)/gm, "<li>$1</li>")
+                              // Bullet lists: "- item" or "• item"
                               .replace(/^[-•]\s+(.+)/gm, "<li>$1</li>")
-                              .replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>")
+                              // Wrap consecutive <li> in <ul>
+                              .replace(/(<li>.*?<\/li>(\s*<li>.*?<\/li>)*)/gs, "<ul>$1</ul>")
+                              // Remove redundant nested <ul> tags
                               .replace(/<\/ul>\s*<ul>/g, "")
+                              // Double newline → paragraph break
                               .replace(/\n{2,}/g, "</p><p>")
+                              // Single newline → line break
                               .replace(/\n/g, "<br/>")
+                              // Wrap in paragraphs
                               .replace(/^(.+)/, "<p>$1")
                               .replace(/(.+)$/, "$1</p>"),
                           }}
