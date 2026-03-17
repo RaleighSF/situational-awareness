@@ -1537,7 +1537,22 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      <TutorialDialog open={isTutorialOpen} onOpenChange={setIsTutorialOpen} />
+      <TutorialDialog
+        open={isTutorialOpen}
+        onOpenChange={setIsTutorialOpen}
+        onTryFeature={(featureId) => {
+          switch (featureId) {
+            case "add-rule":
+              setEditingPrompt(null);
+              setIsPromptFormOpen(true);
+              break;
+            case "grid-search":
+              setIsGridView(true);
+              setTimeout(() => setIsQueryPanelOpen(true), 300);
+              break;
+          }
+        }}
+      />
     </div>
   );
 }
