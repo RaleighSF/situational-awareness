@@ -11,6 +11,7 @@ import { CosmosHealth } from "@/components/cosmos-health";
 import { SceneAgentModal } from "@/components/scene-agent-modal";
 import { QuickAnalysisModal } from "@/components/quick-analysis-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { TutorialDialog } from "@/components/tutorial-dialog";
 import { CameraGrid } from "@/components/camera-grid";
 import { QueryPanel } from "@/components/query-panel";
 import { AlertExplainModal } from "@/components/alert-explain-modal";
@@ -45,6 +46,7 @@ import {
   Monitor,
   Search,
   Brain,
+  Sparkles,
 } from "lucide-react";
 import nttDataLogo from "@assets/ntt-data-logo.png";
 import {
@@ -144,6 +146,7 @@ export default function Dashboard() {
     boundingBox?: { x: number; y: number; width: number; height: number } | null;
   } | null>(null);
   const [isExplainModalOpen, setIsExplainModalOpen] = useState(false);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   
@@ -1014,6 +1017,14 @@ export default function Dashboard() {
               <Search className="h-4 w-4 mr-1" />
               Search
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsTutorialOpen(true)}
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              Walkthrough
+            </Button>
             <ThemeToggle />
           </div>
         </div>
@@ -1525,6 +1536,8 @@ export default function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <TutorialDialog open={isTutorialOpen} onOpenChange={setIsTutorialOpen} />
     </div>
   );
 }
