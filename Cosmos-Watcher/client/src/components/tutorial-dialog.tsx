@@ -41,7 +41,7 @@ const STEPS = [
     icon: Settings,
     title: "Set Scene Context",
     description:
-      "Give the AI a persona and operational context \u2014 e.g. you're monitoring for safety violations with access to a siren API, conveyor controls, or a robotic dog with fire suppression. This shapes how the model reasons about what it sees.",
+      "Tell the AI what to look for \u2014 e.g. you're monitoring for security or safety violations. Then describe what it could theoretically control in the real world, like a siren API, fire suppression system, or conveyor controls. This shapes how the model reasons and responds.",
     featureId: "scene-context",
     tryLabel: "Try it",
   },
@@ -50,7 +50,7 @@ const STEPS = [
     icon: Bot,
     title: "Scene Agent",
     description:
-      "Watches several seconds of live video and delivers a detailed breakdown of activities, interactions, and patterns.",
+      "Samples a batch of frames over a minute-long window and delivers a detailed temporal analysis \u2014 identifying activities, safety concerns, and patterns across the scene.",
     featureId: "scene-agent",
     tryLabel: "Try it",
   },
