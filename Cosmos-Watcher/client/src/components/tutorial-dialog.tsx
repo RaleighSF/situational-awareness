@@ -21,7 +21,7 @@ const STEPS = [
     icon: Plus,
     title: "Add a Detection Rule",
     description:
-      "Describe what to watch for and the AI continuously monitors your feeds \u2014 alerting you the moment it spots a match.",
+      "Describe what to watch for and the AI continuously monitors your feeds \u2014 alerting you the moment it spots a match. Monitor the whole scene or draw a region to focus on a specific area.",
     featureId: "add-rule",
     tryLabel: "Try it",
   },
