@@ -9,6 +9,8 @@ import {
   ChevronRight,
   ChevronLeft,
   X,
+  MonitorPlay,
+  Settings,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -17,12 +19,30 @@ import {
 
 const STEPS = [
   {
+    targetTestId: "select-video-source",
+    icon: MonitorPlay,
+    title: "Choose a Video Source",
+    description:
+      "Start by selecting a video feed that best depicts your intended use case. Each source simulates a live camera \u2014 pick one to explore the AI capabilities in context.",
+    featureId: "select-source",
+    tryLabel: "Try it",
+  },
+  {
     targetTestId: "button-add-rule",
     icon: Plus,
     title: "Add a Detection Rule",
     description:
       "Describe what to watch for and the AI continuously monitors your feeds \u2014 alerting you the moment it spots a match. Monitor the whole scene or draw a region to focus on a specific area.",
     featureId: "add-rule",
+    tryLabel: "Try it",
+  },
+  {
+    targetTestId: "button-scene-agent-settings",
+    icon: Settings,
+    title: "Set Scene Context",
+    description:
+      "Give the AI a persona and operational context \u2014 e.g. you're monitoring for safety violations with access to a siren API, conveyor controls, or a robotic dog with fire suppression. This shapes how the model reasons about what it sees.",
+    featureId: "scene-context",
     tryLabel: "Try it",
   },
   {

@@ -1546,6 +1546,9 @@ export default function Dashboard() {
               setEditingPrompt(null);
               setIsPromptFormOpen(true);
               break;
+            case "scene-context":
+              setIsSceneAgentSettingsOpen(true);
+              break;
             case "grid-search":
               setIsGridView(true);
               setTimeout(() => setIsQueryPanelOpen(true), 300);
