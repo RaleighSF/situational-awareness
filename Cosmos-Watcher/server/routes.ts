@@ -1484,14 +1484,36 @@ export async function registerRoutes(
     }
   });
 
+  // Demo video URLs that are protected from deletion (shipped with the app)
+  const PROTECTED_DEMO_URLS = [
+    "/attached_assets/4473271-hd_1920_1080_30fps_1768617999296.mp4",
+    "/attached_assets/product-picking.mp4",
+    "/attached_assets/engine-assembly.mp4",
+    "/attached_assets/parking-lot.mp4",
+    "/attached_assets/ring-camera.mp4",
+    "/attached_assets/plant-fire.mp4",
+    "/attached_assets/doc-video.mp4",
+  ];
+
   app.delete("/api/video-sources/:id", async (req, res) => {
     try {
       const source = await storage.getVideoSource(req.params.id);
       if (!source) {
         return res.status(404).json({ error: "Video source not found" });
       }
+      // Prevent deletion of demo videos
+      if (PROTECTED_DEMO_URLS.includes(source.url)) {
+        return res.status(403).json({ error: "Cannot delete demo video sources" });
+      }
       await storage.deletePromptsByVideoSource(req.params.id);
-      if (source.url.startsWith("/uploads/")) {
+      // Clean up the physical file
+      if (source.url.startsWith("/attached_assets/")) {
+        const filePath = path.join(ATTACHED_ASSETS_DIR, path.basename(source.url));
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`[Delete] Removed file: ${filePath}`);
+        }
+      } else if (source.url.startsWith("/uploads/")) {
         const filePath = path.join(process.cwd(), source.url);
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);

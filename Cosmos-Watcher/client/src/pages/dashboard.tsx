@@ -28,6 +28,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
@@ -131,6 +141,7 @@ export default function Dashboard() {
   const sceneAgentFramesRef = useRef<string[]>([]);
   
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [uploadFileName, setUploadFileName] = useState("");
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
 
@@ -1166,49 +1177,41 @@ export default function Dashboard() {
                   ))}
                 </SelectContent>
               </Select>
-              {!import.meta.env.PROD && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="video/mp4,video/webm,video/ogg,video/quicktime"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    data-testid="input-video-upload"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadVideoMutation.isPending}
-                    data-testid="button-upload-video"
-                  >
-                    {uploadVideoMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4" />
-                    )}
-                  </Button>
-                  {currentSource && !PROTECTED_DEMO_URLS.includes(currentSource.url) && (
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => {
-                        if (currentVideoSourceId) {
-                          deleteSourceMutation.mutate(currentVideoSourceId);
-                        }
-                      }}
-                      disabled={deleteSourceMutation.isPending}
-                      data-testid="button-delete-source"
-                    >
-                      {deleteSourceMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                    </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                onChange={handleFileSelect}
+                className="hidden"
+                data-testid="input-video-upload"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadVideoMutation.isPending}
+                data-testid="button-upload-video"
+              >
+                {uploadVideoMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+              </Button>
+              {currentSource && !PROTECTED_DEMO_URLS.includes(currentSource.url) && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                  disabled={deleteSourceMutation.isPending}
+                  data-testid="button-delete-source"
+                >
+                  {deleteSourceMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
                   )}
-                </>
+                </Button>
               )}
             </div>
 
@@ -1536,6 +1539,31 @@ export default function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Video Source</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{currentSource?.name}" and all its detection rules and alerts. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (currentVideoSourceId) {
+                  deleteSourceMutation.mutate(currentVideoSourceId);
+                }
+                setIsDeleteDialogOpen(false);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <TutorialDialog
         open={isTutorialOpen}
