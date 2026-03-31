@@ -113,13 +113,13 @@ export type BatchAlertRequest = z.infer<typeof batchAlertRequestSchema>;
 
 export const sceneAgentConfigSchema = z.object({
   durationSeconds: z.number().min(10).max(120).default(20),
-  intervalSeconds: z.number().min(3).max(30).default(4),
+  intervalSeconds: z.number().min(2).max(30).default(4),
   boundingBox: z.union([boundingBoxSchema, z.null()]).optional(),
 });
 
 export const sceneAgentRequestSchema = z.object({
   frames: z.array(z.string()).min(1, "At least one frame is required"),
-  intervalSeconds: z.number().min(3).max(30).default(4),
+  intervalSeconds: z.number().min(2).max(30).default(4),
   durationSeconds: z.number().min(10).max(120).default(20),
   sceneContext: z.string().max(1000).optional(),
 });

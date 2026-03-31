@@ -785,7 +785,7 @@ export default function Dashboard() {
 
   const startSceneAgent = async () => {
     // Configurable smart sampling parameters
-    const FRAME_COUNT = 8; // Number of frames to capture
+    const FRAME_COUNT = 12; // Number of frames to capture
     const MAX_DURATION_SECONDS = 32; // Cap video sampling at 32 seconds
     setIsSceneAgentRunning(true);
     setSceneAgentPhase("recording");
@@ -823,7 +823,7 @@ export default function Dashboard() {
 
       // Calculate effective sampling duration (capped at MAX_DURATION_SECONDS, min 10s for schema)
       const MIN_DURATION_SECONDS = 10;
-      const MIN_INTERVAL_SECONDS = 3; // Cosmos API requires intervalSeconds >= 3
+      const MIN_INTERVAL_SECONDS = 2; // Minimum interval between frame captures
       const effectiveDuration = Math.max(MIN_DURATION_SECONDS, Math.min(videoDuration - 1, MAX_DURATION_SECONDS));
       
       // Calculate max frames allowed to maintain minimum interval
